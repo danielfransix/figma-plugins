@@ -1,0 +1,183 @@
+/* ============================================================================
+   Figma Plugins — Shared Reference Design System (components.css)
+   ----------------------------------------------------------------------------
+   This file is a REFERENCE, not a runtime dependency. Every plugin in this repo
+   ships as a self-contained folder Figma loads independently (manifest.json +
+   code.js + ui.html) — there is no build step and no cross-plugin file import.
+   Copy the token block and whichever component blocks you need directly into
+   your plugin's <style> tag. See DESIGN_SYSTEM.md in this folder for the full
+   catalog, HTML markup for each component, and the Log Panel code.js contract.
+   ============================================================================ */
+
+/* ── Tokens ──────────────────────────────────────────────────────────────
+   Canonical rule: every color aliases Figma's own injected --figma-color-*
+   variable, via `figma.showUI(__html__, { themeColors: true })` in code.js.
+   This makes every plugin auto-match the user's real light/dark Figma theme
+   instead of a hand-guessed fixed palette — confirmed working end-to-end in
+   figma-connector. Fallback values below only matter if theming ever fails
+   to inject; they are not a "pick your own palette" option.
+   ── */
+:root {
+  --color-bg:             var(--figma-color-bg, #2c2c2c);
+  --color-bg-secondary:   var(--figma-color-bg-secondary, #383838);
+  --color-bg-tertiary:    var(--figma-color-bg-tertiary, #1e1e1e);
+  --color-bg-hover:       var(--figma-color-bg-hover, #242424);
+  --color-border:         var(--figma-color-border, #444444);
+  --color-border-strong:  var(--figma-color-border-strong, #555555);
+  --color-text:           var(--figma-color-text, #ffffff);
+  --color-text-secondary: var(--figma-color-text-secondary, rgba(255,255,255,0.7));
+  --color-text-tertiary:  var(--figma-color-text-tertiary, rgba(255,255,255,0.4));
+  --color-text-onbrand:   var(--figma-color-text-onbrand, #ffffff);
+
+  /* One shared brand accent — Figma's own, not a per-plugin identity color.
+     Plugin identity comes from its name/icon in the Figma plugin menu, not
+     a custom hue in the panel chrome. */
+  --color-bg-brand:       var(--figma-color-bg-brand, #0c8ce9);
+  --color-bg-brand-hover: var(--figma-color-bg-brand-hover, #006dcf);
+
+  --color-danger:         var(--figma-color-text-danger, #f87171);
+  --color-warning:        var(--figma-color-text-warning, #fbbf24);
+  --color-success:        var(--figma-color-text-success, #4ade80);
+
+  /* Typography — Plus Jakarta Sans everywhere, JetBrains Mono for log/code
+     text only. Exactly 2 sizes: title and body. Do not add a third. */
+  --font-title-size: 12px;
+  --font-title-lh:   16px;
+  --font-body-size:  11px;
+  --font-body-lh:    16px;
+
+  --radius-sm: 4px;
+  --radius-md: 6px;
+  --radius-pill: 999px;
+}
+
+*, *::before, *::after { box-sizing: border-box; }
+
+body {
+  font-family: 'Plus Jakarta Sans', system-ui, sans-serif;
+  font-size: var(--font-body-size);
+  line-height: var(--font-body-lh);
+  background: var(--color-bg);
+  color: var(--color-text);
+}
+
+/* ── Buttons ── */
+.btn-primary {
+  background: var(--color-bg-brand);
+  border: none;
+  border-radius: var(--radius-md);
+  color: var(--color-text-onbrand);
+  font-size: var(--font-body-size);
+  font-weight: 500;
+  font-family: inherit;
+  padding: 8px 14px;
+  cursor: pointer;
+  transition: background 0.1s, opacity 0.1s;
+}
+.btn-primary:hover:not(:disabled) { background: var(--color-bg-brand-hover); }
+.btn-primary:disabled { opacity: 0.4; cursor: not-allowed; }
+
+.btn-secondary {
+  background: transparent;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  color: var(--color-text);
+  font-size: var(--font-body-size);
+  font-family: inherit;
+  padding: 7px 12px;
+  cursor: pointer;
+  transition: background 0.1s, border-color 0.1s;
+}
+.btn-secondary:hover { background: var(--color-bg-secondary); border-color: var(--color-border-strong); }
+
+.btn-danger { color: var(--color-danger); border-color: var(--color-danger); }
+.btn-danger:hover { background: rgba(248,113,113,0.1); }
+
+/* ── Toggle switch ── */
+.switch { position: relative; display: inline-block; width: 28px; height: 16px; flex-shrink: 0; }
+.switch input { position: absolute; opacity: 0; width: 100%; height: 100%; margin: 0; cursor: pointer; }
+.switch-track { position: absolute; inset: 0; background: var(--color-border-strong); border-radius: var(--radius-pill); transition: background 0.15s; pointer-events: none; }
+.switch-thumb { position: absolute; top: 2px; left: 2px; width: 12px; height: 12px; background: #fff; border-radius: 50%; transition: transform 0.15s; }
+.switch input:checked + .switch-track { background: var(--color-bg-brand); }
+.switch input:checked + .switch-track .switch-thumb { transform: translateX(12px); }
+
+/* ── Chip group (single or multi-select filters) ── */
+.chip-group { display: flex; flex-wrap: wrap; gap: 8px; }
+.chip {
+  padding: 6px 12px;
+  border-radius: 5px;
+  border: 1px solid var(--color-border);
+  background: var(--color-bg);
+  color: var(--color-text);
+  font-size: var(--font-body-size);
+  font-family: inherit;
+  cursor: pointer;
+  transition: background 0.1s, border-color 0.1s, color 0.1s;
+}
+.chip:hover:not(.disabled) { background: var(--color-bg-hover); }
+.chip.active { background: var(--color-bg-brand); border-color: transparent; color: var(--color-text-onbrand); }
+.chip.disabled { opacity: 0.35; cursor: not-allowed; }
+
+/* ── Status / feedback box ── */
+.status-box {
+  padding: 8px 10px;
+  background: var(--color-bg-secondary);
+  border-radius: var(--radius-md);
+  border: 1px solid var(--color-border);
+  font-size: var(--font-body-size);
+  color: var(--color-text-secondary);
+  line-height: var(--font-body-lh);
+  word-break: break-word;
+}
+.status-box.ready { color: var(--color-text); }
+.status-box.warn { color: var(--color-danger); }
+
+/* ── Progress bar ── */
+.progress-bar { height: 2px; background: var(--color-bg-secondary); border-radius: var(--radius-pill); overflow: hidden; }
+.progress-bar-fill { height: 100%; background: var(--color-bg-brand); transition: width 0.15s; width: 0%; }
+
+/* ── Step indicator ── */
+.steps { display: flex; align-items: center; gap: 4px; font-size: var(--font-body-size); color: var(--color-text-secondary); }
+.steps .step.active { color: var(--color-text); font-weight: 500; }
+.steps .step.done { color: var(--color-success); }
+
+/* ── Section label (used above chip groups, log panels, settings groups) ── */
+.section-label {
+  font-size: var(--font-body-size);
+  color: var(--color-text-secondary);
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.divider { height: 1px; background: var(--color-border); }
+
+/* ── Log panel — see DESIGN_SYSTEM.md for the full HTML + JS + code.js contract ── */
+.log-section { border-top: 1px solid var(--color-border); padding: 10px 16px 12px; display: flex; flex-direction: column; gap: 6px; }
+.log-header { display: flex; align-items: center; justify-content: space-between; }
+.copy-btn {
+  display: flex; align-items: center; gap: 5px;
+  background: transparent; border: 1px solid var(--color-border); border-radius: 5px;
+  color: var(--color-text-secondary); font-size: var(--font-body-size); font-family: inherit;
+  padding: 4px 8px; cursor: pointer; transition: background 0.1s, color 0.1s;
+}
+.copy-btn:hover { background: var(--color-bg-secondary); color: var(--color-text); }
+.copy-btn.copied { color: var(--color-bg-brand); border-color: var(--color-bg-brand); }
+.log-list {
+  max-height: 130px; overflow-y: auto;
+  background: var(--color-bg-secondary); border: 1px solid var(--color-border); border-radius: var(--radius-md);
+  padding: 8px 10px;
+  font-family: 'JetBrains Mono', Consolas, monospace;
+  font-size: var(--font-body-size); line-height: var(--font-body-lh);
+}
+.log-empty { color: var(--color-text-secondary); }
+.log-entry { color: var(--color-text-secondary); white-space: pre-wrap; word-break: break-word; }
+.log-entry.error { color: var(--color-danger); }
+.log-entry .log-time { color: var(--color-text-tertiary); margin-right: 6px; }
+
+/* ── Brand footer (repeats across nearly every plugin) ── */
+.brand-footer { display: flex; align-items: center; gap: 8px; padding: 0 16px 12px; }
+.brand-name { font-size: var(--font-body-size); color: var(--color-text); }
+.brand-dot { width: 3px; height: 3px; border-radius: 50%; background: var(--color-border-strong); flex-shrink: 0; }
+.brand-link { font-size: var(--font-body-size); font-family: inherit; color: var(--color-text-secondary); background: none; border: none; cursor: pointer; padding: 0; transition: color 0.15s; }
+.brand-link:hover { color: var(--color-text); }

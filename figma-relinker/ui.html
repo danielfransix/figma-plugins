@@ -1,0 +1,1622 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Figma Relinker</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600&family=JetBrains+Mono:wght@400&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      /* Aliased to Figma's own injected theme (figma.showUI({ themeColors: true })),
+         so this plugin auto-matches the user's real light/dark Figma theme. */
+      --bg-canvas:      var(--figma-color-bg, #141414);
+      --bg-panel:       var(--figma-color-bg-secondary, #1a1a1a);
+      --bg-surface:     var(--figma-color-bg-tertiary, #1e1e1e);
+      --bg-hover:       var(--figma-color-bg-hover, #242424);
+      --border:         var(--figma-color-border, #2a2a2a);
+      --border-sub:     var(--figma-color-border, #1f1f1f);
+      --text-primary:   var(--figma-color-text, #e0e0e0);
+      --text-body:      var(--figma-color-text, #c0c0c0);
+      --text-secondary: var(--figma-color-text-secondary, #888888);
+      --text-muted:     var(--figma-color-text-tertiary, #4a4a4a);
+      --accent:         var(--figma-color-bg-brand, #f59e0b);
+      --accent-dim:     var(--figma-color-bg-brand-hover, #78490a);
+      --error:          var(--figma-color-text-danger, #f87171);
+      --warning:        var(--figma-color-text-warning, #fb923c);
+      --success:        var(--figma-color-text-success, #4ade80);
+      --font-mono:      'JetBrains Mono', Consolas, monospace;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: 'Plus Jakarta Sans', system-ui, sans-serif;
+      font-size: 13px;
+      background: var(--bg-canvas);
+      color: var(--text-body);
+      display: flex;
+      flex-direction: column;
+      min-height: 100vh;
+      overflow-x: hidden;
+    }
+
+    /* ── Step indicator ──────────────────────────────────────────────────────── */
+
+    .header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 14px 16px 0;
+      flex-shrink: 0;
+    }
+
+    .header-title {
+      font-family: 'Plus Jakarta Sans', sans-serif;
+      font-weight: 600;
+      font-size: 13px;
+      color: var(--text-primary);
+      letter-spacing: 0.04em;
+    }
+
+    .steps {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      font-size: 11px;
+      color: var(--text-muted);
+    }
+
+    .step {
+      width: 20px;
+      height: 20px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 10px;
+      font-weight: 600;
+      background: var(--bg-panel);
+      color: var(--text-muted);
+      transition: background 0.2s, color 0.2s;
+    }
+
+    .step.active  { background: var(--accent); color: #000; }
+    .step.done    { background: #2a2a2a; color: var(--text-secondary); }
+
+    .step-arrow { color: var(--text-muted); font-size: 9px; }
+
+    /* ── Divider ─────────────────────────────────────────────────────────────── */
+
+    .divider { height: 1px; background: var(--border-sub); margin: 12px 0 0; flex-shrink: 0; }
+
+    /* ── Content area ────────────────────────────────────────────────────────── */
+
+    .content { flex: 1; padding: 16px; display: flex; flex-direction: column; gap: 12px; }
+
+    /* ── Scope selector ──────────────────────────────────────────────────────── */
+
+    .scope-label {
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--text-secondary);
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+      margin-bottom: 6px;
+    }
+
+    .scope-options {
+      display: flex;
+      gap: 6px;
+    }
+
+    .scope-btn {
+      flex: 1;
+      padding: 7px 0;
+      border-radius: 6px;
+      border: 1px solid var(--border);
+      background: var(--bg-panel);
+      color: var(--text-secondary);
+      font-family: inherit;
+      font-size: 12px;
+      cursor: pointer;
+      text-align: center;
+      transition: border-color 0.15s, color 0.15s, background 0.15s;
+    }
+
+    .scope-btn:hover { border-color: #3a3a3a; color: var(--text-body); background: var(--bg-hover); }
+
+    .scope-btn.active {
+      border-color: var(--accent);
+      color: var(--accent);
+      background: #1c1500;
+    }
+
+    /* ── Buttons ─────────────────────────────────────────────────────────────── */
+
+    .btn {
+      width: 100%;
+      padding: 10px 0;
+      border-radius: 6px;
+      border: none;
+      font-family: inherit;
+      font-size: 13px;
+      font-weight: 500;
+      cursor: pointer;
+      letter-spacing: 0.01em;
+      transition: background 0.15s, opacity 0.15s;
+    }
+
+    .btn-primary {
+      background: var(--accent);
+      color: #0d0900;
+    }
+    .btn-primary:hover  { background: #fbbf24; }
+    .btn-primary:active { background: #d97706; }
+    .btn-primary:disabled { background: #2a2000; color: var(--accent-dim); cursor: not-allowed; }
+
+    .btn-ghost {
+      background: var(--bg-panel);
+      color: var(--text-secondary);
+      border: 1px solid var(--border);
+    }
+    .btn-ghost:hover { background: var(--bg-hover); color: var(--text-body); }
+
+    .btn-sm {
+      padding: 6px 10px;
+      font-size: 12px;
+      width: auto;
+    }
+
+    /* ── Description text ────────────────────────────────────────────────────── */
+
+    .desc {
+      font-size: 12px;
+      color: var(--text-muted);
+      line-height: 1.5;
+    }
+
+    /* ── Progress state ──────────────────────────────────────────────────────── */
+
+    .progress-block {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .progress-line {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 12px;
+      color: var(--text-secondary);
+    }
+
+    .spinner {
+      width: 12px;
+      height: 12px;
+      border: 1.5px solid #333;
+      border-top-color: var(--accent);
+      border-radius: 50%;
+      animation: spin 0.7s linear infinite;
+      flex-shrink: 0;
+    }
+
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    .progress-bar-wrap {
+      height: 4px;
+      background: var(--bg-panel);
+      border-radius: 2px;
+      overflow: hidden;
+    }
+
+    .progress-bar-fill {
+      height: 100%;
+      background: var(--accent);
+      border-radius: 2px;
+      transition: width 0.15s;
+      width: 0%;
+    }
+
+    /* ── Banner ──────────────────────────────────────────────────────────────── */
+
+    .banner {
+      background: #1c1500;
+      border: 1px solid #3a2c00;
+      border-radius: 8px;
+      padding: 11px 13px;
+      font-size: 12px;
+      color: #8a7040;
+      line-height: 1.5;
+    }
+
+    .banner-title {
+      font-size: 12px;
+      color: var(--accent);
+      font-weight: 500;
+      margin-bottom: 4px;
+    }
+
+    /* ── Back row ────────────────────────────────────────────────────────────── */
+
+    .back-row {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 2px;
+    }
+
+    .back-btn {
+      background: none;
+      border: none;
+      color: var(--text-secondary);
+      font-family: inherit;
+      font-size: 12px;
+      cursor: pointer;
+      padding: 0;
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      transition: color 0.15s;
+    }
+    .back-btn:hover { color: var(--text-body); }
+
+    .back-meta {
+      font-size: 12px;
+      color: var(--text-muted);
+    }
+
+    /* ── Quick-action row ────────────────────────────────────────────────────── */
+
+    .quick-row {
+      display: flex;
+      gap: 6px;
+    }
+
+    /* ── Filter input ────────────────────────────────────────────────────────── */
+
+    .filter-input {
+      width: 100%;
+      background: var(--bg-panel);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 7px 10px;
+      font-family: inherit;
+      font-size: 12px;
+      color: var(--text-body);
+      outline: none;
+      transition: border-color 0.15s;
+    }
+    .filter-input::placeholder { color: var(--text-muted); }
+    .filter-input:focus { border-color: #3a3a3a; }
+
+    /* ── Match table ─────────────────────────────────────────────────────────── */
+
+    .match-table-wrap {
+      max-height: 300px;
+      overflow-y: auto;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      flex-shrink: 0;
+    }
+
+    .match-table-wrap::-webkit-scrollbar { width: 4px; }
+    .match-table-wrap::-webkit-scrollbar-track { background: transparent; }
+    .match-table-wrap::-webkit-scrollbar-thumb { background: #2a2a2a; border-radius: 2px; }
+
+    .match-row {
+      display: flex;
+      align-items: flex-start;
+      padding: 10px 12px;
+      gap: 10px;
+      border-bottom: 1px solid var(--border-sub);
+      transition: background 0.12s;
+      cursor: pointer;
+    }
+
+    .match-row:last-child { border-bottom: none; }
+    .match-row:hover { background: var(--bg-hover); }
+    .match-row.disabled-row { opacity: 0.45; cursor: default; }
+
+    .match-check {
+      width: 14px;
+      height: 14px;
+      border-radius: 3px;
+      border: 1.5px solid var(--border);
+      flex-shrink: 0;
+      margin-top: 1px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: background 0.12s, border-color 0.12s;
+    }
+
+    .match-check.checked {
+      background: var(--accent);
+      border-color: var(--accent);
+    }
+
+    .match-check.checked::after {
+      content: '';
+      width: 7px;
+      height: 5px;
+      border-left: 1.5px solid #000;
+      border-bottom: 1.5px solid #000;
+      transform: rotate(-45deg) translateY(-1px);
+      display: block;
+    }
+
+    .match-check.no-match {
+      border-color: #333;
+      background: transparent;
+      cursor: default;
+    }
+
+    .match-body { flex: 1; min-width: 0; }
+
+    .match-name {
+      font-size: 12px;
+      font-weight: 500;
+      color: var(--text-primary);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .match-count {
+      color: var(--text-muted);
+      font-weight: 400;
+      font-size: 11px;
+      margin-left: 4px;
+    }
+
+    .match-target {
+      font-size: 11px;
+      color: var(--text-secondary);
+      margin-top: 2px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .match-target .lib-name {
+      color: var(--text-muted);
+    }
+
+    .match-pages {
+      font-size: 11px;
+      color: var(--text-muted);
+      margin-top: 1px;
+      font-style: italic;
+    }
+
+    .match-confidence {
+      flex-shrink: 0;
+      font-size: 14px;
+      margin-top: 1px;
+      line-height: 1;
+    }
+
+    /* ── Inline choose picker ────────────────────────────────────────────────── */
+
+    .choose-btn {
+      background: none;
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      color: var(--text-muted);
+      font-family: inherit;
+      font-size: 11px;
+      padding: 2px 7px;
+      cursor: pointer;
+      transition: border-color 0.12s, color 0.12s;
+      margin-top: 3px;
+      display: inline-block;
+    }
+    .choose-btn:hover { border-color: #3a3a3a; color: var(--text-secondary); }
+
+    .inline-picker {
+      margin-top: 6px;
+      display: none;
+    }
+
+    .inline-picker.open { display: block; }
+
+    .inline-picker input {
+      width: 100%;
+      background: var(--bg-surface);
+      border: 1px solid var(--border);
+      border-radius: 5px;
+      padding: 5px 8px;
+      font-family: inherit;
+      font-size: 11px;
+      color: var(--text-body);
+      outline: none;
+      margin-bottom: 4px;
+    }
+
+    .inline-picker input:focus { border-color: #3a3a3a; }
+
+    .picker-results {
+      max-height: 120px;
+      overflow-y: auto;
+      border: 1px solid var(--border);
+      border-radius: 5px;
+    }
+
+    .picker-result-item {
+      padding: 6px 9px;
+      font-size: 11px;
+      color: var(--text-body);
+      cursor: pointer;
+      border-bottom: 1px solid var(--border-sub);
+      transition: background 0.1s;
+    }
+
+    .picker-result-item:last-child { border-bottom: none; }
+    .picker-result-item:hover { background: var(--bg-hover); }
+
+    .picker-result-lib {
+      color: var(--text-muted);
+      font-size: 10px;
+      margin-top: 1px;
+    }
+
+    /* ── Apply summary row ───────────────────────────────────────────────────── */
+
+    .apply-summary {
+      font-size: 12px;
+      color: var(--text-muted);
+      text-align: center;
+      padding: 2px 0;
+    }
+
+    /* ── Result screen ───────────────────────────────────────────────────────── */
+
+    .result-rows {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+
+    .result-row {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 10px 13px;
+      background: var(--bg-panel);
+      border-radius: 7px;
+    }
+
+    .result-icon { font-size: 15px; flex-shrink: 0; }
+
+    .result-count {
+      font-size: 18px;
+      font-weight: 600;
+      color: var(--text-primary);
+      min-width: 30px;
+      text-align: right;
+    }
+
+    .result-label { font-size: 12px; color: var(--text-secondary); }
+
+    .undo-hint {
+      font-size: 11px;
+      color: var(--text-muted);
+      text-align: center;
+      padding: 2px 0;
+    }
+
+    .result-actions {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    /* ── Empty state ─────────────────────────────────────────────────────────── */
+
+    .empty-state {
+      text-align: center;
+      padding: 24px 0 8px;
+    }
+
+    .empty-icon { font-size: 28px; margin-bottom: 8px; }
+
+    .empty-title {
+      font-size: 13px;
+      font-weight: 500;
+      color: var(--text-primary);
+      margin-bottom: 6px;
+    }
+
+    .empty-desc {
+      font-size: 12px;
+      color: var(--text-muted);
+      line-height: 1.5;
+      max-width: 260px;
+      margin: 0 auto;
+    }
+
+    /* ── Footer ──────────────────────────────────────────────────────────────── */
+
+    .footer {
+      border-top: 1px solid var(--border-sub);
+      padding: 0 16px;
+      height: 46px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-shrink: 0;
+      background: var(--bg-canvas);
+    }
+
+    .log-section { border-top: 1px solid var(--border-sub); padding: 10px 16px; display: flex; flex-direction: column; gap: 6px; flex-shrink: 0; }
+    .log-header { display: flex; align-items: center; justify-content: space-between; }
+    .log-label { font-size: 11px; color: var(--text-secondary); font-weight: 500; text-transform: uppercase; letter-spacing: 0.04em; }
+    .copy-log-btn {
+      display: flex; align-items: center; gap: 5px;
+      background: transparent; border: 1px solid var(--border); border-radius: 5px;
+      color: var(--text-secondary); font-size: 11px; font-family: inherit;
+      padding: 4px 8px; cursor: pointer; transition: background 0.1s, color 0.1s;
+    }
+    .copy-log-btn:hover { background: var(--bg-hover); color: var(--text-primary); }
+    .copy-log-btn.copied { color: var(--accent); border-color: var(--accent); }
+    .log-list {
+      max-height: 100px; overflow-y: auto;
+      background: var(--bg-panel); border: 1px solid var(--border); border-radius: 6px;
+      padding: 8px 10px;
+      font-family: var(--font-mono);
+      font-size: 11px; line-height: 16px;
+    }
+    .log-empty { color: var(--text-secondary); }
+    .log-entry { color: var(--text-secondary); white-space: pre-wrap; word-break: break-word; }
+    .log-entry.error { color: var(--error); }
+    .log-entry .log-time { color: var(--text-muted); margin-right: 6px; }
+
+    .footer-brand {
+      font-family: 'Plus Jakarta Sans', sans-serif;
+      font-weight: 600;
+      font-size: 11px;
+      color: var(--text-primary);
+      letter-spacing: 0.04em;
+    }
+
+    .footer-version { font-size: 10px; color: var(--text-muted); margin-left: 2px; }
+
+    .footer-sep { color: var(--border); font-size: 11px; }
+
+    .footer-link {
+      font-size: 11px;
+      cursor: pointer;
+      color: rgba(255,255,255,0.35);
+      background: none;
+      border: none;
+      font-family: inherit;
+      padding: 0;
+      transition: color 0.15s;
+    }
+    .footer-link:hover { color: #fff; }
+
+    /* ── Match table column header ───────────────────────────────────────────── */
+
+    .match-col-header {
+      display: flex;
+      justify-content: space-between;
+      padding: 4px 12px 4px 36px;
+      font-size: 10px;
+      color: var(--text-muted);
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+      font-weight: 600;
+    }
+
+    .conf-header {
+      cursor: help;
+      border-bottom: 1px dashed var(--text-muted);
+    }
+
+    /* ── Keyboard focus ring ─────────────────────────────────────────────────── */
+
+    .match-row:focus {
+      outline: none;
+      background: var(--bg-hover);
+      box-shadow: inset 2px 0 0 var(--accent);
+    }
+
+    /* ── Utility ─────────────────────────────────────────────────────────────── */
+
+    .hidden { display: none !important; }
+
+    .tooltip-host { position: relative; cursor: help; }
+  </style>
+</head>
+<body>
+
+  <!-- Step 1: Scan -->
+  <div id="step1">
+    <div class="header">
+      <span class="header-title">Figma Relinker</span>
+      <div class="steps">
+        <div class="step active" id="s1dot">1</div>
+        <span class="step-arrow">›</span>
+        <div class="step" id="s2dot">2</div>
+        <span class="step-arrow">›</span>
+        <div class="step" id="s3dot">3</div>
+      </div>
+    </div>
+    <div class="divider"></div>
+
+    <div class="content">
+      <!-- Last scan badge -->
+      <div id="lastScanBadge" class="hidden">
+        <span id="lastScanText" style="font-size:11px;color:var(--text-muted);"></span>
+      </div>
+
+      <!-- Scope selector -->
+      <div>
+        <div class="scope-label">Scan scope</div>
+        <div class="scope-options">
+          <button class="scope-btn" data-scope="selection" id="scopeSelection">Selection</button>
+          <button class="scope-btn active" data-scope="page" id="scopePage">Page</button>
+          <button class="scope-btn" data-scope="all" id="scopeAll">All Pages</button>
+        </div>
+      </div>
+
+      <!-- Idle state -->
+      <div id="idleBlock">
+        <button class="btn btn-primary" id="scanBtn">Scan for broken instances</button>
+        <p class="desc" style="margin-top:8px;">
+          Broken instances are those whose main component is no longer accessible in any connected library.
+        </p>
+      </div>
+
+      <!-- Scanning progress -->
+      <div id="scanningBlock" class="hidden progress-block">
+        <div class="progress-line">
+          <div class="spinner"></div>
+          <span id="scanProgressText">Scanning…</span>
+        </div>
+        <div class="progress-line" id="libFetchLine" style="color:var(--text-muted);">
+          <div class="spinner" style="border-top-color:#555;"></div>
+          <span>Loading libraries…</span>
+        </div>
+        <button class="btn btn-ghost" id="cancelScanBtn" style="margin-top:4px;">Cancel</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Step 2: Review matches -->
+  <div id="step2" class="hidden">
+    <div class="header">
+      <div class="back-row">
+        <button class="back-btn" id="backBtn">&#8592; Back</button>
+        <span class="back-meta" id="step2Meta"></span>
+      </div>
+      <div class="steps">
+        <div class="step done">1</div>
+        <span class="step-arrow">›</span>
+        <div class="step active">2</div>
+        <span class="step-arrow">›</span>
+        <div class="step">3</div>
+      </div>
+    </div>
+    <div class="divider"></div>
+
+    <div class="content">
+
+      <!-- No-library banner -->
+      <div class="banner hidden" id="noLibBanner">
+        <div class="banner-title">No connected libraries found</div>
+        Make sure your library is enabled in the Assets panel (Shift+I → Libraries), then Re-scan.
+      </div>
+
+      <!-- Empty state: no broken instances -->
+      <div id="noInstancesBlock" class="hidden empty-state">
+        <div class="empty-icon">✅</div>
+        <div class="empty-title">No broken instances found</div>
+        <div class="empty-desc">This plugin finds instances whose component has been <strong>deleted or its library removed</strong>. It does not detect naming issues, detached frames, or missing styles. Try "All Pages" scope if broken instances are on other pages.</div>
+      </div>
+
+      <!-- Match table UI -->
+      <div id="matchUI">
+        <!-- Large scan warning (>1000 broken instances) -->
+        <div class="banner hidden" id="largeResultBanner">
+          <div class="banner-title">Large scan result</div>
+          Over 1,000 broken instances found. Fuzzy matches (○) are unchecked by default. Start with "Enable High" to apply only exact matches.
+        </div>
+
+        <input class="filter-input" id="filterInput" placeholder="Filter by component name or library…" />
+
+        <div class="quick-row" style="margin-top:8px;">
+          <button class="btn btn-ghost btn-sm" id="enableHighBtn">Enable High</button>
+          <button class="btn btn-ghost btn-sm" id="enableHighMedBtn">Enable High + Medium</button>
+        </div>
+
+        <div class="match-col-header" style="margin-top:8px;">
+          <span>Component</span>
+          <span class="conf-header" title="High ● = exact name match. Medium ◐ = normalized or suffix-stripped match. Low ○ = approximate (fuzzy) — verify before applying. ✗ = no match found.">Conf.</span>
+        </div>
+
+        <div class="match-table-wrap" id="matchTable"></div>
+
+        <div class="apply-summary" id="applySummary" style="margin-top:6px;"></div>
+
+        <button class="btn btn-primary" id="applyBtn" style="margin-top:4px;" disabled>Relink</button>
+        <button class="btn btn-ghost" id="cancelReviewBtn" style="margin-top:6px;">Cancel</button>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- Step 3: Applying + Result -->
+  <div id="step3" class="hidden">
+    <div class="header">
+      <span class="header-title" id="step3Title">Applying…</span>
+      <div class="steps">
+        <div class="step done">1</div>
+        <span class="step-arrow">›</span>
+        <div class="step done">2</div>
+        <span class="step-arrow">›</span>
+        <div class="step active">3</div>
+      </div>
+    </div>
+    <div class="divider"></div>
+
+    <div class="content">
+
+      <!-- Applying progress -->
+      <div id="applyingBlock" class="progress-block">
+        <div class="progress-line">
+          <div class="spinner"></div>
+          <span id="applyProgressText">Preparing…</span>
+        </div>
+        <div class="progress-bar-wrap">
+          <div class="progress-bar-fill" id="applyProgressBar"></div>
+        </div>
+        <button class="btn btn-ghost" id="cancelApplyBtn" style="margin-top:4px;">Cancel</button>
+      </div>
+
+      <!-- Result -->
+      <div id="resultBlock" class="hidden">
+        <div class="result-rows">
+          <div class="result-row">
+            <span class="result-icon">✅</span>
+            <span class="result-count" id="resultOk">0</span>
+            <span class="result-label">instances relinked</span>
+          </div>
+          <div class="result-row" id="resultPartialRow">
+            <span class="result-icon">⚠️</span>
+            <span class="result-count" id="resultPartial">0</span>
+            <span class="result-label">variant fell back to default</span>
+          </div>
+          <div class="result-row" id="resultFailedRow">
+            <span class="result-icon">✗</span>
+            <span class="result-count" id="resultFailed">0</span>
+            <span class="result-label">failed — no matching component</span>
+          </div>
+          <div id="cancelledRow" class="result-row hidden">
+            <span class="result-icon">⏹</span>
+            <span class="result-count">—</span>
+            <span class="result-label">cancelled before completion</span>
+          </div>
+        </div>
+
+        <div class="undo-hint" style="margin-top:10px;">
+          Cmd+Z / Ctrl+Z to undo all relinks.
+        </div>
+
+        <div class="result-actions" style="margin-top:10px;">
+          <button class="btn btn-ghost" id="selectFailuresBtn" style="display:none;">Select failures in canvas</button>
+          <button class="btn btn-ghost" id="copyReportBtn">Copy report</button>
+          <button class="btn btn-primary" id="scanAgainBtn">Scan again</button>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- Log -->
+  <div class="log-section">
+    <div class="log-header">
+      <span class="log-label">Log</span>
+      <button type="button" class="copy-log-btn" id="copyLogBtn">
+        <svg width="12" height="12" viewBox="0 0 12 12" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <rect x="4" y="4" width="7" height="7" rx="1" stroke="currentColor" stroke-width="1.1"/>
+          <path d="M2.5 8V2.5C2.5 1.94772 2.94772 1.5 3.5 1.5H8" stroke="currentColor" stroke-width="1.1"/>
+        </svg>
+        <span id="copyLogLabel">Copy</span>
+      </button>
+    </div>
+    <div class="log-list" id="logList">
+      <div class="log-empty">No actions yet.</div>
+    </div>
+  </div>
+
+  <!-- Footer -->
+  <footer class="footer">
+    <span class="footer-brand">Figma Relinker</span>
+    <span class="footer-version">v1.0</span>
+    <span class="footer-sep">|</span>
+    <button class="footer-link" id="xLink">@danielfransix</button>
+    <span class="footer-sep">|</span>
+    <button class="footer-link" id="coffeeLink">☕ Buy me a coffee</button>
+  </footer>
+
+  <script>
+    // ── State ─────────────────────────────────────────────────────────────────
+
+    var state = {
+      scope:         'page',
+      scanResult:    null,   // { groups, sets, localComps } from last scan
+      matches:       [],     // computed match rows
+      lastScanTime:  null,
+      failedGroups:  [],
+    };
+
+    // Generation counter — incremented on every new scan and on cancel.
+    // Each startScan() captures its generation at launch; if the counter has
+    // moved by the time the await resolves (cancelled or superseded), the
+    // stale result is discarded rather than overwriting current state.
+    var _scanGeneration = 0;
+
+    // ── Message bus ───────────────────────────────────────────────────────────
+
+    var pendingResolvers = new Map();
+    var msgIdCounter = 0;
+
+    function send(command, params) {
+      return new Promise(function(resolve, reject) {
+        var id = 'r' + (++msgIdCounter);
+        pendingResolvers.set(id, { resolve: resolve, reject: reject });
+        parent.postMessage({ pluginMessage: { id: id, command: command, params: params || {} } }, '*');
+      });
+    }
+
+    function sendUnsolicited(type) {
+      parent.postMessage({ pluginMessage: { type: type } }, '*');
+    }
+
+    window.onmessage = function(event) {
+      var msg = event.data && event.data.pluginMessage;
+      if (!msg) return;
+
+      if (msg.id) {
+        var handler = pendingResolvers.get(msg.id);
+        if (handler) {
+          pendingResolvers.delete(msg.id);
+          if (msg.error) handler.reject(new Error(msg.error));
+          else handler.resolve(msg.result);
+        }
+        return;
+      }
+
+      if (msg.type === 'scan_progress')  { onScanProgress(msg); return; }
+      if (msg.type === 'apply_progress') { onApplyProgress(msg); return; }
+      if (msg.type === 'lib_fetch_error') { onLibFetchError(msg); return; }
+      if (msg.type === 'log') { addLogEntry(msg); return; }
+    };
+
+    // ── Log panel ────────────────────────────────────────────────────────────
+    var logEntries = []; // { time, level, message }
+    var logList = document.getElementById('logList');
+    var copyLogBtn = document.getElementById('copyLogBtn');
+    var copyLogLabel = document.getElementById('copyLogLabel');
+
+    copyLogBtn.addEventListener('click', copyLogs);
+
+    function addLogEntry(entry) {
+      logEntries.push(entry);
+      var row = document.createElement('div');
+      row.className = 'log-entry' + (entry.level === 'error' ? ' error' : '');
+      var timeSpan = document.createElement('span');
+      timeSpan.className = 'log-time';
+      timeSpan.textContent = entry.time;
+      row.appendChild(timeSpan);
+      row.appendChild(document.createTextNode(entry.message));
+      if (logList.querySelector('.log-empty')) logList.innerHTML = '';
+      logList.appendChild(row);
+      logList.scrollTop = logList.scrollHeight;
+    }
+
+    function copyLogs() {
+      var text = logEntries.length
+        ? logEntries.map(function(e) { return '[' + e.time + '] ' + (e.level === 'error' ? 'ERROR: ' : '') + e.message; }).join('\n')
+        : 'No actions yet.';
+      var ta = document.createElement('textarea');
+      ta.value = text;
+      ta.style.position = 'fixed';
+      ta.style.opacity = '0';
+      document.body.appendChild(ta);
+      ta.focus();
+      ta.select();
+      try {
+        document.execCommand('copy');
+        copyLogLabel.textContent = 'Copied';
+        copyLogBtn.classList.add('copied');
+        setTimeout(function() { copyLogLabel.textContent = 'Copy'; copyLogBtn.classList.remove('copied'); }, 1200);
+      } catch (e) {
+        copyLogLabel.textContent = 'Failed';
+      }
+      document.body.removeChild(ta);
+    }
+
+    // ── Resize ────────────────────────────────────────────────────────────────
+
+    var ro = new ResizeObserver(function() {
+      var h = Math.min(document.body.offsetHeight, 600);
+      parent.postMessage({ pluginMessage: { type: 'resize', height: h } }, '*');
+    });
+    ro.observe(document.body);
+
+    // ── Step management ───────────────────────────────────────────────────────
+
+    function showStep(n) {
+      document.getElementById('step1').classList.toggle('hidden', n !== 1);
+      document.getElementById('step2').classList.toggle('hidden', n !== 2);
+      document.getElementById('step3').classList.toggle('hidden', n !== 3);
+    }
+
+    // ── Scope ─────────────────────────────────────────────────────────────────
+
+    document.querySelectorAll('.scope-btn').forEach(function(btn) {
+      btn.addEventListener('click', function() {
+        document.querySelectorAll('.scope-btn').forEach(function(b) { b.classList.remove('active'); });
+        btn.classList.add('active');
+        state.scope = btn.dataset.scope;
+      });
+    });
+
+    // ── Scan ──────────────────────────────────────────────────────────────────
+
+    document.getElementById('scanBtn').addEventListener('click', startScan);
+    document.getElementById('cancelScanBtn').addEventListener('click', cancelScan);
+
+    async function startScan() {
+      var myGeneration = ++_scanGeneration;
+
+      document.getElementById('idleBlock').classList.add('hidden');
+      document.getElementById('scanningBlock').classList.remove('hidden');
+      document.getElementById('libFetchLine').classList.remove('hidden');
+      document.getElementById('scanProgressText').textContent = 'Scanning…';
+
+      try {
+        var result = await send('scan_and_fetch', { scope: state.scope });
+
+        // Discard result if this scan was cancelled or superseded by a newer one
+        if (myGeneration !== _scanGeneration) return;
+
+        state.scanResult = result;
+        state.lastScanTime = new Date();
+        document.getElementById('libFetchLine').classList.add('hidden');
+
+        if (result.cancelled) {
+          resetToIdle();
+          return;
+        }
+
+        goToStep2();
+      } catch (e) {
+        if (myGeneration !== _scanGeneration) return; // stale, ignore
+        resetToIdle();
+        showScanError(e.message);
+      }
+    }
+
+    function cancelScan() {
+      _scanGeneration++; // invalidates any in-flight startScan await
+      sendUnsolicited('cancel');
+      resetToIdle();
+    }
+
+    function showScanError(msg) {
+      var el = document.getElementById('scanProgressText');
+      el.textContent = '⚠ ' + (msg || 'Scan failed');
+      el.style.color = 'var(--warning)';
+      document.getElementById('cancelScanBtn').textContent = 'Dismiss';
+    }
+
+    function resetToIdle() {
+      document.getElementById('scanningBlock').classList.add('hidden');
+      document.getElementById('idleBlock').classList.remove('hidden');
+      // Reset any error styling from showScanError
+      var el = document.getElementById('scanProgressText');
+      el.textContent = 'Scanning…';
+      el.style.color = '';
+      document.getElementById('cancelScanBtn').textContent = 'Cancel';
+      updateLastScanBadge();
+    }
+
+    function onScanProgress(msg) {
+      var text = msg.scanned === 0
+        ? 'Scanning…'
+        : 'Scanning… ' + msg.scanned.toLocaleString() + ' nodes · ' + msg.found + ' broken found';
+      document.getElementById('scanProgressText').textContent = text;
+    }
+
+    function onLibFetchError(msg) {
+      var line = document.getElementById('libFetchLine');
+      line.innerHTML = ''; // clear spinners
+      var span = document.createElement('span');
+      span.style.color = 'var(--warning)';
+      span.textContent = '⚠ Libraries unavailable — ' + (msg.message || 'check your connection');
+      line.appendChild(span);
+    }
+
+    function updateLastScanBadge() {
+      if (!state.lastScanTime || !state.scanResult) return;
+      var badge = document.getElementById('lastScanBadge');
+      var text  = document.getElementById('lastScanText');
+      var total = state.scanResult.groups
+        ? state.scanResult.groups.reduce(function(s, g) { return s + g.instanceIds.length; }, 0)
+        : 0;
+      var t = state.lastScanTime;
+      var timeStr = t.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+      text.textContent = 'Last scan ' + timeStr + ' · ' + total + ' broken instances found · Re-scan to refresh';
+      badge.classList.remove('hidden');
+    }
+
+    // ── Step 2: Review ────────────────────────────────────────────────────────
+
+    function goToStep2() {
+      var result = state.scanResult;
+      var groups = result.groups || [];
+      var sets   = result.sets || [];
+      var local  = result.localComps || [];
+
+      showStep(2);
+
+      // No instances
+      if (groups.length === 0) {
+        document.getElementById('noInstancesBlock').classList.remove('hidden');
+        document.getElementById('matchUI').classList.add('hidden');
+        document.getElementById('step2Meta').textContent = '';
+        return;
+      }
+
+      document.getElementById('noInstancesBlock').classList.add('hidden');
+      document.getElementById('matchUI').classList.remove('hidden');
+
+      // No libraries banner
+      if (sets.length === 0 && local.length === 0) {
+        document.getElementById('noLibBanner').classList.remove('hidden');
+      } else {
+        document.getElementById('noLibBanner').classList.add('hidden');
+      }
+
+      var totalInstances = groups.reduce(function(s, g) { return s + g.instanceIds.length; }, 0);
+      document.getElementById('step2Meta').textContent =
+        totalInstances + ' broken · ' + groups.length + ' groups';
+
+      // >1000 instances warning
+      document.getElementById('largeResultBanner').classList.toggle('hidden', totalInstances <= 1000);
+
+      // Run matching engine
+      state.matches = matchGroups(groups, sets, local);
+
+      renderMatchTable('');
+      document.getElementById('filterInput').value = '';
+      updateApplySummary();
+    }
+
+    document.getElementById('backBtn').addEventListener('click', function() {
+      sendUnsolicited('cancel');
+      showStep(1);
+      updateLastScanBadge();
+    });
+
+    document.getElementById('cancelReviewBtn').addEventListener('click', function() {
+      showStep(1);
+      updateLastScanBadge();
+    });
+
+    // ── Filter ────────────────────────────────────────────────────────────────
+
+    document.getElementById('filterInput').addEventListener('input', function() {
+      renderMatchTable(this.value.toLowerCase().trim());
+    });
+
+    // ── Quick-enable buttons ──────────────────────────────────────────────────
+
+    document.getElementById('enableHighBtn').addEventListener('click', function() {
+      state.matches.forEach(function(m) {
+        if (m.targetSetKey || m.targetLocalId) {
+          m.enabled = (m.confidence === 'high');
+        }
+      });
+      renderMatchTable(document.getElementById('filterInput').value.toLowerCase().trim());
+      updateApplySummary();
+    });
+
+    document.getElementById('enableHighMedBtn').addEventListener('click', function() {
+      state.matches.forEach(function(m) {
+        if (m.targetSetKey || m.targetLocalId) {
+          m.enabled = (m.confidence === 'high' || m.confidence === 'medium');
+        }
+      });
+      renderMatchTable(document.getElementById('filterInput').value.toLowerCase().trim());
+      updateApplySummary();
+    });
+
+    // ── Match table render ────────────────────────────────────────────────────
+
+    var confidenceDot = { high: '●', medium: '◐', low: '○', manual: '●', null: '✗' };
+    var confidenceColor = { high: 'var(--success)', medium: 'var(--warning)', low: 'var(--text-muted)', manual: 'var(--accent)', null: 'var(--error)' };
+
+    function renderMatchTable(filter) {
+      var wrap = document.getElementById('matchTable');
+      wrap.innerHTML = '';
+
+      var visible = state.matches.filter(function(m) {
+        if (!filter) return true;
+        var haystack = (m.instanceName + ' ' + (m.libraryName || '') + ' ' + (m.targetSetKey || '')).toLowerCase();
+        return haystack.indexOf(filter) !== -1;
+      });
+
+      if (visible.length === 0) {
+        wrap.innerHTML = '<div style="padding:20px;text-align:center;font-size:12px;color:var(--text-muted);">No matches for that filter.</div>';
+        return;
+      }
+
+      visible.forEach(function(m, idx) {
+        var hasTarget = !!(m.targetSetKey || m.targetLocalId);
+        var dot       = hasTarget ? (confidenceDot[m.confidence] || '●') : '✗';
+        var dotColor  = hasTarget ? (confidenceColor[m.confidence] || 'var(--text-muted)') : 'var(--error)';
+
+        var row = document.createElement('div');
+        row.className = 'match-row' + (!hasTarget ? ' disabled-row' : '');
+        row.dataset.matchIdx = state.matches.indexOf(m);
+
+        // Checkbox
+        var check = document.createElement('div');
+        check.className = 'match-check' + (hasTarget && m.enabled ? ' checked' : '') + (!hasTarget ? ' no-match' : '');
+
+        // Body
+        var body = document.createElement('div');
+        body.className = 'match-body';
+
+        var nameLine = document.createElement('div');
+        nameLine.className = 'match-name';
+        nameLine.innerHTML = escHtml(m.instanceName) +
+          '<span class="match-count">×' + m.instanceIds.length + '</span>';
+
+        var targetLine = document.createElement('div');
+        targetLine.className = 'match-target';
+
+        if (hasTarget) {
+          targetLine.innerHTML = '→ ' + escHtml(m.instanceName) +
+            ' <span class="lib-name">· ' + escHtml(m.libraryName || 'Local') + '</span>';
+        } else {
+          targetLine.innerHTML = '<span style="color:var(--text-muted);">no match found</span>';
+        }
+
+        body.appendChild(nameLine);
+        body.appendChild(targetLine);
+
+        // Pages line (if spans multiple pages)
+        if (m.pageNames && m.pageNames.length > 1) {
+          var pgLine = document.createElement('div');
+          pgLine.className = 'match-pages';
+          pgLine.textContent = 'Pages: ' + m.pageNames.join(', ');
+          body.appendChild(pgLine);
+        }
+
+        // "Choose…" button for no-match rows
+        if (!hasTarget) {
+          var chooseBtn = document.createElement('button');
+          chooseBtn.className = 'choose-btn';
+          chooseBtn.textContent = 'Choose…';
+          chooseBtn.dataset.matchIdx = state.matches.indexOf(m);
+
+          var picker = document.createElement('div');
+          picker.className = 'inline-picker';
+
+          var pickerInput = document.createElement('input');
+          pickerInput.placeholder = 'Search library components…';
+
+          var pickerResults = document.createElement('div');
+          pickerResults.className = 'picker-results';
+
+          picker.appendChild(pickerInput);
+          picker.appendChild(pickerResults);
+
+          chooseBtn.addEventListener('click', function(e) {
+            e.stopPropagation();
+            picker.classList.toggle('open');
+            if (picker.classList.contains('open')) {
+              pickerInput.focus();
+              renderPickerResults(pickerResults, '', m);
+            }
+          });
+
+          pickerInput.addEventListener('input', function() {
+            renderPickerResults(pickerResults, pickerInput.value.toLowerCase(), m);
+          });
+
+          pickerInput.addEventListener('click', function(e) { e.stopPropagation(); });
+
+          body.appendChild(chooseBtn);
+          body.appendChild(picker);
+        }
+
+        // Confidence dot
+        var confEl = document.createElement('div');
+        confEl.className = 'match-confidence';
+        confEl.textContent = dot;
+        confEl.style.color = dotColor;
+        confEl.title = confidenceTitle(m.confidence);
+
+        row.appendChild(check);
+        row.appendChild(body);
+        row.appendChild(confEl);
+
+        // Toggle on row click
+        if (hasTarget) {
+          row.setAttribute('tabindex', '0');
+          row.addEventListener('click', function() {
+            var midx = parseInt(row.dataset.matchIdx, 10);
+            var match = state.matches[midx];
+            match.enabled = !match.enabled;
+            renderMatchTable(document.getElementById('filterInput').value.toLowerCase().trim());
+            updateApplySummary();
+          });
+        }
+
+        wrap.appendChild(row);
+      });
+    }
+
+    function renderPickerResults(container, query, targetMatch) {
+      container.innerHTML = '';
+      var allSets = (state.scanResult && state.scanResult.sets) || [];
+      var allLocal = (state.scanResult && state.scanResult.localComps) || [];
+
+      var results = [];
+
+      allSets.forEach(function(s) {
+        if (!query || s.name.toLowerCase().indexOf(query) !== -1 || (s.libraryName || '').toLowerCase().indexOf(query) !== -1) {
+          results.push({ label: s.name, sub: s.libraryName, type: 'set', data: s });
+        }
+      });
+
+      allLocal.forEach(function(c) {
+        var displayName = c.setName || c.name;
+        if (!query || displayName.toLowerCase().indexOf(query) !== -1) {
+          results.push({ label: displayName, sub: 'Local', type: 'local', data: c });
+        }
+      });
+
+      results = results.slice(0, 40);
+
+      if (results.length === 0) {
+        container.innerHTML = '<div style="padding:8px;font-size:11px;color:var(--text-muted);">No results.</div>';
+        return;
+      }
+
+      results.forEach(function(r) {
+        var item = document.createElement('div');
+        item.className = 'picker-result-item';
+        item.innerHTML = escHtml(r.label) + '<div class="picker-result-lib">' + escHtml(r.sub || '') + '</div>';
+        item.addEventListener('click', function(e) {
+          e.stopPropagation();
+          // Apply manual choice
+          targetMatch.confidence   = 'manual';
+          targetMatch.libraryName  = r.sub || 'Local';
+          if (r.type === 'set') {
+            targetMatch.targetSetKey  = r.data.key;
+            targetMatch.targetLocalId = null;
+          } else {
+            targetMatch.targetLocalId = r.data.id;
+            targetMatch.targetSetKey  = null;
+          }
+          targetMatch.enabled = true;
+          renderMatchTable(document.getElementById('filterInput').value.toLowerCase().trim());
+          updateApplySummary();
+        });
+        container.appendChild(item);
+      });
+    }
+
+    function confidenceTitle(c) {
+      if (c === 'high')   return 'High confidence — exact name match';
+      if (c === 'medium') return 'Medium — normalized or suffix-stripped match';
+      if (c === 'low')    return 'Low — approximate (fuzzy) match. Verify before applying.';
+      if (c === 'manual') return 'Manually selected';
+      return 'No match found';
+    }
+
+    function updateApplySummary() {
+      var enabled = state.matches.filter(function(m) { return m.enabled; });
+      var instCount = enabled.reduce(function(s, m) { return s + m.instanceIds.length; }, 0);
+      var applyBtn = document.getElementById('applyBtn');
+      if (enabled.length === 0) {
+        document.getElementById('applySummary').textContent = '';
+        applyBtn.disabled = true;
+        applyBtn.textContent = 'Relink';
+      } else {
+        document.getElementById('applySummary').textContent =
+          enabled.length + ' group' + (enabled.length !== 1 ? 's' : '') + ' · ' + instCount + ' instances';
+        applyBtn.disabled = false;
+        applyBtn.textContent = 'Relink ' + enabled.length + ' group' + (enabled.length !== 1 ? 's' : '') + ' · ' + instCount + ' instances';
+      }
+    }
+
+    // ── Keyboard navigation in match table ───────────────────────────────────
+
+    document.getElementById('matchTable').addEventListener('keydown', function(e) {
+      var rows = Array.from(this.querySelectorAll('.match-row[tabindex="0"]'));
+      var focused = document.activeElement;
+      var idx = rows.indexOf(focused);
+
+      if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        if (idx < rows.length - 1) rows[idx + 1].focus();
+        else if (idx === -1 && rows.length > 0) rows[0].focus();
+      } else if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        if (idx > 0) rows[idx - 1].focus();
+      } else if (e.key === ' ' && idx !== -1) {
+        e.preventDefault();
+        focused.click();
+      } else if (e.key === 'Enter') {
+        e.preventDefault();
+        var applyBtn = document.getElementById('applyBtn');
+        if (!applyBtn.disabled) applyBtn.click();
+      } else if (e.key === 'Escape') {
+        e.preventDefault();
+        if (focused) focused.blur();
+        document.getElementById('filterInput').focus();
+      }
+    });
+
+    // ── Apply ─────────────────────────────────────────────────────────────────
+
+    document.getElementById('applyBtn').addEventListener('click', startApply);
+    document.getElementById('cancelApplyBtn').addEventListener('click', function() {
+      sendUnsolicited('cancel');
+    });
+
+    async function startApply() {
+      var matchesToSend = state.matches.filter(function(m) { return m.enabled; });
+
+      showStep(3);
+      document.getElementById('step3Title').textContent = 'Applying…';
+      document.getElementById('applyingBlock').classList.remove('hidden');
+      document.getElementById('resultBlock').classList.add('hidden');
+      document.getElementById('applyProgressText').textContent = 'Preparing…';
+      document.getElementById('applyProgressBar').style.width = '0%';
+
+      try {
+        var result = await send('apply_relinks', { matches: matchesToSend });
+        showResult(result);
+      } catch (e) {
+        showResult({ ok: 0, partial: 0, failed: 0, failedGroups: [], error: e.message });
+      }
+    }
+
+    function onApplyProgress(msg) {
+      if (msg.phase === 'importing') {
+        if (msg.total === 0) {
+          // No sets to import — skip straight to 50% so relinking fills the second half
+          document.getElementById('applyProgressBar').style.width = '50%';
+        } else {
+          document.getElementById('applyProgressText').textContent =
+            'Importing ' + msg.done + ' / ' + msg.total + ' component sets…';
+          document.getElementById('applyProgressBar').style.width =
+            Math.round((msg.done / msg.total) * 50) + '%';
+        }
+      } else if (msg.phase === 'relinking') {
+        document.getElementById('applyProgressText').textContent =
+          'Relinking ' + msg.done + ' / ' + msg.total + ' instances…';
+        document.getElementById('applyProgressBar').style.width =
+          (50 + Math.round((msg.done / Math.max(msg.total, 1)) * 50)) + '%';
+      }
+    }
+
+    function showResult(result) {
+      document.getElementById('step3Title').textContent = 'Done';
+      document.getElementById('applyingBlock').classList.add('hidden');
+      document.getElementById('resultBlock').classList.remove('hidden');
+
+      document.getElementById('resultOk').textContent      = result.ok || 0;
+      document.getElementById('resultPartial').textContent  = result.partial || 0;
+      document.getElementById('resultFailed').textContent   = result.failed || 0;
+
+      document.getElementById('resultPartialRow').style.display = (result.partial > 0) ? '' : 'none';
+      document.getElementById('resultFailedRow').style.display  = (result.failed  > 0) ? '' : 'none';
+      document.getElementById('cancelledRow').classList.toggle('hidden', !result.cancelled);
+
+      state.failedGroups = result.failedGroups || [];
+
+      var selectBtn = document.getElementById('selectFailuresBtn');
+      if (result.failed > 0 && state.failedGroups.length > 0) {
+        selectBtn.style.display = '';
+        selectBtn.textContent   = 'Select ' + result.failed + ' failure' + (result.failed !== 1 ? 's' : '') + ' in canvas';
+        buildFailurePageMap();
+      } else {
+        selectBtn.style.display = 'none';
+      }
+    }
+
+    // ── Failure page map & select ─────────────────────────────────────────────
+
+    var failurePageMap = []; // [{ pageId, nodeIds }] sorted by nodeIds.length desc
+    var failurePageIdx = 0;
+
+    function buildFailurePageMap() {
+      var byPage = new Map();
+      state.failedGroups.forEach(function(fg) {
+        var match = state.matches.find(function(m) { return m.instanceName === fg.name; });
+        if (!match) return;
+        var ibp = match.instancesByPage || {};
+        Object.keys(ibp).forEach(function(pid) {
+          if (!byPage.has(pid)) byPage.set(pid, { pageId: pid, nodeIds: [] });
+          ibp[pid].forEach(function(id) { byPage.get(pid).nodeIds.push(id); });
+        });
+        // Fallback: if instancesByPage not populated (older scan), use all ids on first page
+        if (Object.keys(ibp).length === 0 && match.pageIds.length > 0) {
+          var pid = match.pageIds[0];
+          if (!byPage.has(pid)) byPage.set(pid, { pageId: pid, nodeIds: [] });
+          match.instanceIds.forEach(function(id) { byPage.get(pid).nodeIds.push(id); });
+        }
+      });
+      failurePageMap = Array.from(byPage.values()).sort(function(a, b) { return b.nodeIds.length - a.nodeIds.length; });
+      failurePageIdx = 0;
+    }
+
+    document.getElementById('selectFailuresBtn').addEventListener('click', async function() {
+      if (failurePageMap.length === 0) return;
+      var currentIdx = failurePageIdx;
+      var entry = failurePageMap[currentIdx];
+      await send('select_nodes_on_page', { pageId: entry.pageId, nodeIds: entry.nodeIds });
+      failurePageIdx = (currentIdx + 1) % failurePageMap.length;
+      if (failurePageMap.length > 1) {
+        // Show which page was just selected, and hint at next
+        this.textContent = 'Failures on page ' + (currentIdx + 1) + ' of ' + failurePageMap.length + ' — click for next';
+      }
+    });
+
+    // ── Copy report ───────────────────────────────────────────────────────────
+
+    document.getElementById('copyReportBtn').addEventListener('click', function() {
+      var lines = ['Figma Relinker — Report'];
+      state.matches.forEach(function(m) {
+        var status = !m.enabled ? '─' : (!m.targetSetKey && !m.targetLocalId ? '✗' : (m.confidence === 'low' ? '○' : '✅'));
+        lines.push(status + ' ' + m.instanceName + ' ×' + m.instanceIds.length +
+          (m.libraryName ? ' → ' + m.instanceName + ' (' + m.libraryName + ')' : ' → no match'));
+      });
+      navigator.clipboard.writeText(lines.join('\n')).catch(function() {});
+    });
+
+    // ── Scan again ────────────────────────────────────────────────────────────
+
+    document.getElementById('scanAgainBtn').addEventListener('click', function() {
+      state.scanResult   = null;
+      state.matches      = [];
+      state.failedGroups = [];
+      showStep(1);
+      resetToIdle();
+    });
+
+    // ── Footer links ──────────────────────────────────────────────────────────
+
+    document.getElementById('xLink').addEventListener('click', function() {
+      parent.postMessage({ pluginMessage: { type: 'open_url', url: 'https://x.com/danielfransix' } }, '*');
+    });
+
+    document.getElementById('coffeeLink').addEventListener('click', function() {
+      parent.postMessage({ pluginMessage: { type: 'open_url', url: 'https://danielfransix.short.gy/buy-coffee' } }, '*');
+    });
+
+    // ── Matching engine (runs in UI thread) ───────────────────────────────────
+
+    function normalizeName(name) {
+      return name.replace(/\s*\/\s*/g, '/').replace(/_/g, '/').toLowerCase().trim();
+    }
+
+    function stripVariantSuffix(name) {
+      var parts = name.split('/');
+      var VARIANT_WORDS = /^(default|primary|secondary|sm|md|lg|true|false|on|off|light|dark|\d+)$/i;
+      if (parts.length > 1 && VARIANT_WORDS.test(parts[parts.length - 1].trim())) {
+        return parts.slice(0, -1).join('/');
+      }
+      return name;
+    }
+
+    function buildTokenIndex(sets) {
+      var index = new Map();
+      sets.forEach(function(s) {
+        s.name.toLowerCase().split(/[\/\s_-]+/).forEach(function(tok) {
+          if (!index.has(tok)) index.set(tok, new Set());
+          index.get(tok).add(s);
+        });
+      });
+      return index;
+    }
+
+    function bestFuzzyMatch(name, sets, tokenIndex) {
+      var tokens = name.toLowerCase().split(/[\/\s_-]+/);
+      var candidates = new Map();
+      tokens.forEach(function(tok) {
+        var hits = tokenIndex.get(tok);
+        if (!hits) return;
+        hits.forEach(function(s) { candidates.set(s, (candidates.get(s) || 0) + 1); });
+      });
+      var best = null, bestScore = 0;
+      candidates.forEach(function(overlap, s) {
+        var cTokens = s.name.toLowerCase().split(/[\/\s_-]+/);
+        var score = overlap / Math.max(tokens.length, cTokens.length);
+        if (score > bestScore && score >= 0.6) { bestScore = score; best = s; }
+      });
+      return best;
+    }
+
+    function matchGroups(groups, sets, localComps) {
+      var byExact  = new Map();
+      var byNorm   = new Map();
+      var tokenIdx = buildTokenIndex(sets);
+
+      sets.forEach(function(s) {
+        var lower = s.name.toLowerCase();
+        var norm  = normalizeName(s.name);
+        if (!byExact.has(lower)) byExact.set(lower, s);
+        if (!byNorm.has(norm))   byNorm.set(norm, s);
+      });
+
+      var localBySetName = new Map();
+      localComps.forEach(function(c) {
+        var key = (c.setName || c.name).toLowerCase();
+        if (!localBySetName.has(key)) localBySetName.set(key, []);
+        localBySetName.get(key).push(c);
+      });
+
+      return groups.map(function(group) {
+        var name   = group.name;
+        var lower  = name.toLowerCase();
+        var norm   = normalizeName(name);
+        var suffix = stripVariantSuffix(name).toLowerCase();
+
+        var target = null, confidence = null, isLocal = false;
+
+        if ((target = byExact.get(lower))) {
+          confidence = 'high';
+        } else if ((target = byNorm.get(norm))) {
+          confidence = 'high';
+        } else if ((target = byExact.get(suffix) || byNorm.get(normalizeName(suffix)))) {
+          confidence = 'medium';
+        } else if ((target = bestFuzzyMatch(name, sets, tokenIdx))) {
+          confidence = 'low';
+        } else {
+          var locals = localBySetName.get(lower) || localBySetName.get(norm);
+          if (locals && locals.length > 0) {
+            target = locals[0];
+            confidence = 'high';
+            isLocal = true;
+          }
+        }
+
+        return {
+          instanceName:        name,
+          instanceIds:         group.instanceIds,
+          instancesByPage:     group.instancesByPage || {},
+          componentProperties: group.componentProperties,
+          pageIds:             group.pageIds,
+          pageNames:           group.pageNames,
+          targetSetKey:        (!isLocal && target) ? target.key  : null,
+          targetLocalId:       (isLocal  && target) ? target.id   : null,
+          libraryName:         isLocal ? 'Local' : (target ? target.libraryName : null),
+          confidence:          confidence,
+          enabled:             confidence === 'high' || confidence === 'medium',
+        };
+      });
+    }
+
+    // ── Utility ───────────────────────────────────────────────────────────────
+
+    function escHtml(str) {
+      return String(str || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+    }
+
+  </script>
+</body>
+</html>
