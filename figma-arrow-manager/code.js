@@ -1,248 +1,230 @@
-figma.showUI(__html__, { width: 360, height: 480, title: "Figma Connector", themeColors: true });
+// Figma Arrow Manager — plugin backend (Figma Plugin API), plain JS, no build step.
+//
+// A plugin can never create or clone a native CONNECTOR node ("Cloning CONNECTOR
+// nodes is not supported in the current editor"). Instead, the user copy-pastes a
+// fresh connector from their styled original (Ctrl+C once, Ctrl+V per new
+// connection — Figma preserves the exact styling natively), then selects that
+// pasted connector plus the two elements to connect, and this plugin reassigns
+// the connector's two ends. It also bulk-manages every connector's visibility,
+// color, and stroke weight on the current page.
 
-// No "master" state needed anymore: a real plugin cannot create or clone a CONNECTOR
-// node ("Cloning CONNECTOR nodes is not supported in the current editor" — confirmed
-// against the actual installed plugin). Instead, the user copy-pastes a fresh connector
-// from their styled original (Ctrl+C once, Ctrl+V per new connection — Figma preserves
-// the exact styling natively), then selects that pasted connector plus the two elements
-// to connect, and this plugin reassigns the connector's two ends.
+const TOOL_ID = 'figma-arrow-manager-001';
+const RELAUNCH_LABEL = 'Manage arrows';
 
-figma.on('selectionchange', () => {
-  sendSelectionStatus();
-  sendConnectorState();
-});
-sendSelectionStatus();
-sendConnectorState();
-
-figma.ui.onmessage = (msg) => {
-  if (msg.type === 'connect') return handleConnect();
-  if (msg.type === 'toggle-visibility') return handleToggleVisibility(msg.show);
-  if (msg.type === 'apply-style') return handleApplyStyle(msg.color, msg.weight);
-  if (msg.type === 'randomize-colors') return handleRandomizeColors();
-  if (msg.type === 'resize') {
-    const h = Math.max(280, Math.min(700, msg.height));
-    figma.ui.resize(360, h);
-    return;
-  }
-};
+function formatTime() {
+  const date = new Date();
+  const pad = (value) => String(value).padStart(2, '0');
+  return `${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`;
+}
 
 function log(level, message) {
   figma.ui.postMessage({ type: 'log', level, message, time: formatTime() });
 }
 
-function formatTime() {
-  const d = new Date();
-  const pad = (n) => String(n).padStart(2, '0');
-  return `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
+function notify(message, error) {
+  figma.notify(message, error ? { error: true } : undefined);
+  log(error ? 'error' : 'info', message);
+}
+
+function getAllConnectors() {
+  return figma.currentPage.findAllWithCriteria({ types: ['CONNECTOR'] });
 }
 
 function sendSelectionStatus() {
-  const sel = figma.currentPage.selection;
-  const connectors = sel.filter((n) => n.type === 'CONNECTOR');
-  const others = sel.filter((n) => n.type !== 'CONNECTOR');
+  const selection = figma.currentPage.selection;
+  const connectors = selection.filter((node) => node.type === 'CONNECTOR');
+  const others = selection.filter((node) => node.type !== 'CONNECTOR');
   figma.ui.postMessage({
     type: 'selection-status',
-    count: sel.length,
-    names: sel.map((n) => n.name),
+    count: selection.length,
+    names: selection.map((node) => node.name),
     connectorCount: connectors.length,
     otherCount: others.length,
-    canConnect: sel.length === 3 && connectors.length === 1 && others.length === 2,
+    canConnect: selection.length === 3 && connectors.length === 1 && others.length === 2,
   });
 }
 
-async function handleConnect() {
-  const sel = figma.currentPage.selection;
-  const connectors = sel.filter((n) => n.type === 'CONNECTOR');
-  const others = sel.filter((n) => n.type !== 'CONNECTOR');
-
-  if (sel.length !== 3 || connectors.length !== 1 || others.length !== 2) {
-    const msg = 'Select exactly 3 items: one pasted connector and the two elements to connect.';
-    figma.notify(msg, { error: true });
-    log('error', msg);
-    return;
-  }
-
-  const connector = connectors[0];
-  const [a, b] = others;
-
-  // The API doesn't enforce same-page itself, so the plugin validates this.
-  const connectorPage = findPage(connector);
-  if (findPage(a) !== connectorPage || findPage(b) !== connectorPage) {
-    const msg = 'All selected items must be on the current page.';
-    figma.notify(msg, { error: true });
-    log('error', msg);
-    return;
-  }
-
-  await clearLabel(connector); // pasted copies may carry over the original's label text
-
-  let startInfo, endInfo;
-  try {
-    startInfo = attachEndpoint(connector, a, 'connectorStart');
-    endInfo = attachEndpoint(connector, b, 'connectorEnd');
-  } catch (e) {
-    figma.notify(e.message, { error: true });
-    log('error', e.message);
-    return;
-  }
-
-  figma.currentPage.selection = [connector]; // one click away from a manual arrow-flip if needed
-
-  const climbNotes = [];
-  if (startInfo.climbed) climbNotes.push(`"${a.name}" → attached to "${startInfo.node.name}"`);
-  if (endInfo.climbed) climbNotes.push(`"${b.name}" → attached to "${endInfo.node.name}"`);
-  const msg = climbNotes.length ? `Connected (${climbNotes.join('; ')})` : `Connected "${a.name}" to "${b.name}".`;
-  figma.notify(msg);
-  log('info', msg);
+function sendConnectorState() {
+  const connectors = getAllConnectors();
+  figma.ui.postMessage({
+    type: 'connector-state',
+    shown: connectors.length === 0 || connectors.some((connector) => connector.visible),
+    count: connectors.length,
+  });
 }
 
 function findPage(node) {
-  let p = node;
-  while (p && p.type !== 'PAGE') p = p.parent;
-  return p;
+  let candidate = node;
+  while (candidate !== null && candidate.type !== 'PAGE') candidate = candidate.parent;
+  return candidate !== null && candidate.type === 'PAGE' ? candidate : null;
 }
 
-// Try the node itself first; on failure, climb to node.parent and retry.
-// The only real failure mode is "Invalid endpointNodeId" for a node nested inside a
-// component instance — climbing always succeeds by the time it reaches the instance
-// root (attaching to an INSTANCE directly works fine). The PAGE/DOCUMENT boundary is
-// our own safety net: the raw API accepts a page as an endpoint without error, but
-// that's visually meaningless, so we stop and fail before ever trying it.
-function attachEndpoint(connector, node, propName) {
+// Try the node itself first; on failure, climb to node.parent and retry. The only
+// real failure mode is "Invalid endpointNodeId" for a node nested inside a
+// component instance — climbing always succeeds by the time it reaches the
+// instance root. The PAGE/DOCUMENT boundary is our own safety net: the raw API
+// accepts a page as an endpoint without error, but that's visually meaningless.
+function attachEndpoint(connector, node, property) {
   let candidate = node;
   let climbed = false;
-  while (candidate && candidate.type !== 'PAGE' && candidate.type !== 'DOCUMENT') {
-    try {
-      connector[propName] = { endpointNodeId: candidate.id, magnet: 'AUTO' };
-      return { node: candidate, climbed };
-    } catch (e) {
-      candidate = candidate.parent;
-      climbed = true;
+  while (candidate !== null && candidate.type !== 'PAGE' && candidate.type !== 'DOCUMENT') {
+    if ('visible' in candidate) {
+      try {
+        connector[property] = { endpointNodeId: candidate.id, magnet: 'AUTO' };
+        return { node: candidate, climbed };
+      } catch (e) {
+        climbed = true;
+      }
     }
+    candidate = candidate.parent;
   }
   throw new Error(`Couldn't attach to "${node.name}" or any of its parents.`);
 }
 
 async function clearLabel(connector) {
   try {
-    const label = connector.text.characters;
-    if (!label) return; // already empty — no font load needed
-    await figma.loadFontAsync(connector.text.fontName);
+    if (!connector.text.characters) return;
+    const fontName = connector.text.fontName;
+    if (fontName !== figma.mixed) await figma.loadFontAsync(fontName);
     connector.text.characters = '';
-  } catch (e) {
-    log('error', `Couldn't clear connector label (kept as-is): ${e.message}`);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    log('error', `Couldn't clear the connector label; it was kept as-is. ${message}`);
   }
 }
 
-// ── Manage Connectors: visibility / color / weight (ported from the "Toggle
-// connectors" plugin brief) — operates on every CONNECTOR on the current page.
+async function connectSelected() {
+  const selection = figma.currentPage.selection;
+  const connectors = selection.filter((node) => node.type === 'CONNECTOR');
+  const others = selection.filter((node) => node.type !== 'CONNECTOR');
+  if (selection.length !== 3 || connectors.length !== 1 || others.length !== 2) {
+    notify('Select exactly one pasted connector and two elements to connect.', true);
+    return;
+  }
 
-function getAllConnectors() {
-  return figma.currentPage.findAllWithCriteria({ types: ['CONNECTOR'] });
+  const connector = connectors[0];
+  const first = others[0];
+  const second = others[1];
+  const page = findPage(connector);
+  if (page === null || findPage(first) !== page || findPage(second) !== page) {
+    notify('All selected items must be on the current page.', true);
+    return;
+  }
+
+  await clearLabel(connector);
+  try {
+    const start = attachEndpoint(connector, first, 'connectorStart');
+    const end = attachEndpoint(connector, second, 'connectorEnd');
+    figma.currentPage.selection = [connector];
+    const notes = [];
+    if (start.climbed) notes.push(`"${first.name}" attached to "${start.node.name}"`);
+    if (end.climbed) notes.push(`"${second.name}" attached to "${end.node.name}"`);
+    notify(notes.length > 0 ? `Connected. ${notes.join('; ')}.` : `Connected "${first.name}" to "${second.name}".`);
+  } catch (error) {
+    notify(error instanceof Error ? error.message : String(error), true);
+  }
+  sendSelectionStatus();
+  sendConnectorState();
 }
 
-function sendConnectorState() {
-  const connectors = getAllConnectors();
-  const shown = connectors.length === 0 || connectors.some((c) => c.visible);
-  figma.ui.postMessage({ type: 'connector-state', shown, count: connectors.length });
-}
-
-function handleToggleVisibility(show) {
+function setVisibility(show) {
   const connectors = getAllConnectors();
   if (connectors.length === 0) {
-    figma.notify('No connectors found on this page.');
-    log('info', 'No connectors found on this page.');
+    notify('No connectors found on this page.');
     return;
   }
   let changed = 0;
-  for (const c of connectors) {
-    if (c.visible !== show) {
-      c.visible = show;
-      changed++;
+  for (const connector of connectors) {
+    if (connector.visible !== show) {
+      connector.visible = show;
+      changed += 1;
     }
   }
-  const msg = `${show ? 'Showing' : 'Hiding'} ${connectors.length} connector${connectors.length === 1 ? '' : 's'}${changed < connectors.length ? ` (${changed} changed)` : ''}.`;
-  figma.notify(msg);
-  log('info', msg);
-}
-
-function handleApplyStyle(hex, weight) {
-  const connectors = getAllConnectors();
-  if (connectors.length === 0) {
-    figma.notify('No connectors found on this page.');
-    log('info', 'No connectors found on this page.');
-    return;
-  }
-  const rgb = hexToRgb(hex || '#0D99FF');
-  const paint = { type: 'SOLID', color: rgb };
-  const clampedWeight = Math.min(10, Math.max(0.5, weight || 2));
-
-  for (const c of connectors) {
-    const currentStroke = c.strokes && c.strokes[0];
-    const currentColor = currentStroke && currentStroke.type === 'SOLID' ? currentStroke.color : null;
-    if (!currentColor || !colorsEqual(currentColor, rgb)) c.strokes = [paint];
-    if (c.strokeWeight !== clampedWeight) c.strokeWeight = clampedWeight;
-  }
-  const msg = `Updated ${connectors.length} connector${connectors.length === 1 ? '' : 's'} — color ${hex}, weight ${clampedWeight}.`;
-  figma.notify(msg);
-  log('info', msg);
-}
-
-function handleRandomizeColors() {
-  const connectors = getAllConnectors();
-  if (connectors.length === 0) {
-    figma.notify('No connectors found on this page.');
-    log('info', 'No connectors found on this page.');
-    return;
-  }
-  const colors = generateDistinctColors(connectors.length);
-  for (let i = 0; i < connectors.length; i++) {
-    connectors[i].strokes = [{ type: 'SOLID', color: colors[i] }];
-  }
-  const msg = `Randomized colors on ${connectors.length} connector${connectors.length === 1 ? '' : 's'}.`;
-  figma.notify(msg);
-  log('info', msg);
-}
-
-// Convert HSL (h: 0-360, s: 0-1, l: 0-1) to Figma RGB (0-1)
-function hslToRgb(h, s, l) {
-  const c = (1 - Math.abs(2 * l - 1)) * s;
-  const x = c * (1 - Math.abs(((h / 60) % 2) - 1));
-  const m = l - c / 2;
-  let r = 0, g = 0, b = 0;
-  if (h < 60) { r = c; g = x; b = 0; }
-  else if (h < 120) { r = x; g = c; b = 0; }
-  else if (h < 180) { r = 0; g = c; b = x; }
-  else if (h < 240) { r = 0; g = x; b = c; }
-  else if (h < 300) { r = x; g = 0; b = c; }
-  else { r = c; g = 0; b = x; }
-  return { r: r + m, g: g + m, b: b + m };
-}
-
-// Generate N maximally distinct colors by evenly spacing hues (golden angle).
-// Lightness stays mid-range so colors read on both light and dark surfaces.
-function generateDistinctColors(count) {
-  const colors = [];
-  const goldenAngle = 137.508;
-  const startHue = Math.random() * 360; // random start so each run looks different
-  for (let i = 0; i < count; i++) {
-    const hue = (startHue + i * goldenAngle) % 360;
-    const saturation = 0.7 + (i % 3) * 0.1;
-    const lightness = 0.45 + (i % 4) * 0.05;
-    colors.push(hslToRgb(hue, saturation, lightness));
-  }
-  return colors;
+  notify(`${show ? 'Showing' : 'Hiding'} ${connectors.length} connector${connectors.length === 1 ? '' : 's'}${changed < connectors.length ? ` (${changed} changed)` : ''}.`);
+  sendConnectorState();
 }
 
 function hexToRgb(hex) {
-  const h = hex.replace('#', '');
+  const clean = /^#[0-9a-f]{6}$/i.test(hex) ? hex.slice(1) : '0D99FF';
   return {
-    r: parseInt(h.slice(0, 2), 16) / 255,
-    g: parseInt(h.slice(2, 4), 16) / 255,
-    b: parseInt(h.slice(4, 6), 16) / 255,
+    r: Number.parseInt(clean.slice(0, 2), 16) / 255,
+    g: Number.parseInt(clean.slice(2, 4), 16) / 255,
+    b: Number.parseInt(clean.slice(4, 6), 16) / 255,
   };
 }
 
-function colorsEqual(a, b) {
-  return Math.abs(a.r - b.r) < 0.001 && Math.abs(a.g - b.g) < 0.001 && Math.abs(a.b - b.b) < 0.001;
+function colorsEqual(first, second) {
+  return Math.abs(first.r - second.r) < 0.001 &&
+    Math.abs(first.g - second.g) < 0.001 &&
+    Math.abs(first.b - second.b) < 0.001;
 }
+
+function applyStyle(color, weight) {
+  const connectors = getAllConnectors();
+  if (connectors.length === 0) {
+    notify('No connectors found on this page.');
+    return;
+  }
+  const rgb = hexToRgb(color);
+  const strokeWeight = Math.max(0.5, Math.min(10, Number.isFinite(weight) ? weight : 2));
+  for (const connector of connectors) {
+    const currentStroke = connector.strokes[0];
+    const currentColor = currentStroke && currentStroke.type === 'SOLID' ? currentStroke.color : null;
+    if (currentColor === null || !colorsEqual(currentColor, rgb)) {
+      connector.strokes = [{ type: 'SOLID', color: rgb }];
+    }
+    if (connector.strokeWeight !== strokeWeight) connector.strokeWeight = strokeWeight;
+  }
+  notify(`Updated ${connectors.length} connector${connectors.length === 1 ? '' : 's'} — ${color}, ${strokeWeight}px.`);
+}
+
+function hslToRgb(hue, saturation, lightness) {
+  const chroma = (1 - Math.abs(2 * lightness - 1)) * saturation;
+  const x = chroma * (1 - Math.abs(((hue / 60) % 2) - 1));
+  const match = lightness - chroma / 2;
+  let red = 0;
+  let green = 0;
+  let blue = 0;
+  if (hue < 60) { red = chroma; green = x; }
+  else if (hue < 120) { red = x; green = chroma; }
+  else if (hue < 180) { green = chroma; blue = x; }
+  else if (hue < 240) { green = x; blue = chroma; }
+  else if (hue < 300) { red = x; blue = chroma; }
+  else { red = chroma; blue = x; }
+  return { r: red + match, g: green + match, b: blue + match };
+}
+
+function randomizeColors() {
+  const connectors = getAllConnectors();
+  if (connectors.length === 0) {
+    notify('No connectors found on this page.');
+    return;
+  }
+  const startHue = Math.random() * 360;
+  connectors.forEach((connector, index) => {
+    const hue = (startHue + index * 137.508) % 360;
+    connector.strokes = [{ type: 'SOLID', color: hslToRgb(hue, 0.7 + (index % 3) * 0.1, 0.45 + (index % 4) * 0.05) }];
+  });
+  notify(`Randomized colors on ${connectors.length} connector${connectors.length === 1 ? '' : 's'}.`);
+}
+
+async function start() {
+  await figma.currentPage.loadAsync();
+  figma.root.setRelaunchData({ [TOOL_ID]: RELAUNCH_LABEL });
+  figma.showUI(__html__, { width: 320, height: 520, title: 'Figma Arrow Manager', themeColors: true });
+  sendSelectionStatus();
+  sendConnectorState();
+  figma.on('selectionchange', () => {
+    sendSelectionStatus();
+    sendConnectorState();
+  });
+  figma.ui.onmessage = (message) => {
+    if (message.type === 'connect') void connectSelected();
+    else if (message.type === 'toggle-visibility') setVisibility(message.show);
+    else if (message.type === 'apply-style') applyStyle(message.color, message.weight);
+    else if (message.type === 'randomize-colors') randomizeColors();
+    else if (message.type === 'resize') figma.ui.resize(320, Math.max(80, Math.min(900, Math.round(message.height))));
+  };
+}
+
+void start();

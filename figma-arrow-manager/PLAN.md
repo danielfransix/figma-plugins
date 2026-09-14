@@ -1,8 +1,10 @@
-# Figma Connector Plugin — Implementation Plan
+# Figma Arrow Manager — Implementation Plan
 
-**Folder:** `figma-connector/` (new sibling folder in `c:\Github Repos\figma-plugins\`, alongside `figma-selector`, `figma-relinker`, etc.)
-**Plugin name:** "Figma Connector" (easy to rename later)
+**Folder:** `figma-arrow-manager/` (sibling folder in this repo, alongside `figma-selector`, `figma-relinker`, etc. — originally created as `figma-connector/`, renamed 2026-09-14)
+**Plugin name:** "Figma Arrow Manager" (originally shipped as "Figma Connector", then "Connector manager")
 **Date:** 2026-09-13
+
+> **Current status (2026-09-14):** this plan documents the plugin's design history, ending at the "Paste-then-Connect" pivot and the ported "Manage Connectors" bulk-styling feature below. The plugin has since been rebuilt once more on top of that same behavior: `documentAccess: "dynamic-page"`, a `manifest.json` relaunch button ("Manage arrows"), and a Figma-native `fig-*` (PropsKit) UI in place of the hand-rolled CSS UI described at the end of this file. See [agent-build-instructions.md](agent-build-instructions.md) for the authoritative, up-to-date build spec — this file is kept for historical context on *why* the design looks the way it does (the clone-vs-paste feasibility findings below are still accurate and still the reason the plugin works the way it does).
 
 ---
 

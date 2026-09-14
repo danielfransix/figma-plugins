@@ -1,8 +1,18 @@
 # Figma Plugins — Shared Design System
 
-**Purpose:** a single reference for every plugin in this repo (`figma-linter`, `figma-selector`, `figma-relinker`, `figma-bulk-style-manipulator`, `figma-color-generator`, `figma-component-collector`, `instance-resetter`, `figma-connector`) so they look and feel like one native Figma surface, and so a new plugin can be started from a consistent baseline.
+**Purpose:** a single reference for every plugin in this repo (`figma-linter`, `figma-selector`, `figma-relinker`, `figma-bulk-style-manipulator`, `figma-color-generator`, `figma-component-collector`, `instance-resetter`, `figma-arrow-manager`) so they look and feel like one native Figma surface, and so a new plugin can be started from a consistent baseline.
 
 **How to use this:** plugins are self-contained (`manifest.json` + `code.js` + `ui.html`, no build step, no cross-plugin imports — Figma loads each folder independently). This is a copy-paste reference, not a runtime dependency. Copy `components.css`'s token block and whichever components you need into your plugin's `<style>` tag.
+
+---
+
+## 0. Dead end, confirmed — do not use Figma's `fig-*` tags
+
+Figma's internal UI kit markup (`fig-content`, `fig-group`, `fig-field`, `fig-button`, `fig-switch`, `fig-input-color`, `fig-slider`, `fig-footer`, sometimes called "PropsKit") shows up in AI-plugin-generation output and in files exported from that surface, styled and fully functional. **It does not work in a normally-installed, normally-loaded plugin.** Confirmed by shipping it in `figma-arrow-manager`: every `fig-*` tag rendered as a bare, unstyled anonymous inline element — no button chrome, no switch, no divider, no color picker, no slider — even though the JS underneath (event listeners, `postMessage` wiring) worked fine. The custom elements themselves are simply never registered in a real plugin iframe; they're an artifact of Figma's own internal generation/preview tooling, not a documented or generally-available part of the Plugin API.
+
+This is the second time this exact trap has bitten this repo — see `figma-arrow-manager/PLAN.md`'s changelog for the first (an MCP-mediated `use_figma` call let `connectorNode.clone()` succeed when a real installed plugin throws on it). **The pattern to internalize: anything observed only through Figma's AI-assisted tooling (MCP calls, AI-generated plugin previews) needs to be re-verified in a real, manually-installed plugin before it's trusted as a building block.** Don't reach for `fig-*` tags again without that re-verification, and don't trust a "it worked when Figma's AI generated it" result for anything else either.
+
+Build all interactive controls (buttons, switches, sliders, color inputs) as plain HTML + CSS per Section 4 below instead.
 
 ---
 
@@ -23,20 +33,20 @@ figma.showUI(__html__, { width: 360, height: 480, title: "My Plugin", themeColor
 }
 ```
 
-This makes the plugin automatically match whatever theme (light or dark) the user's actual Figma is running — not a fixed dark palette we picked. Confirmed working end-to-end in `figma-connector`. See `components.css` for the full token block.
+This makes the plugin automatically match whatever theme (light or dark) the user's actual Figma is running — not a fixed dark palette we picked. Confirmed working end-to-end in `figma-arrow-manager`. See `components.css` for the full token block.
 
 **Why not keep each plugin's own hand-picked accent color?** Several plugins previously used a distinct accent (orange, purple, amber, green) so they'd be recognizable at a glance. Under this system, plugin identity comes from its name/icon in the Figma plugin menu and its window title — not a custom hue in the panel chrome — so every plugin shares Figma's own brand blue (`--figma-color-bg-brand`) for primary actions.
 
 ## 2. Typography
 
-- **Body/headers:** `Plus Jakarta Sans` (weights 400/500/600), loaded from Google Fonts.
+- **Body/headers:** `Plus Jakarta Sans` (weights 400/500/600/700), loaded from Google Fonts.
 - **Log/code text only:** `JetBrains Mono`.
 - **Exactly 2 font sizes, everywhere:** a title size and a body size (see `--font-title-size` / `--font-body-size` in `components.css`, 12px/11px). Do not introduce a third size — status text, buttons, chips, log entries all use the body size.
 
 ```html
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600&family=JetBrains+Mono:wght@400&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400&display=swap" rel="stylesheet">
 ```
 
 ## 3. Spacing & shape
@@ -47,7 +57,7 @@ This makes the plugin automatically match whatever theme (light or dark) the use
 
 ## 4. Component catalog
 
-All of these are in `components.css`, ready to paste. Class names are consistent across plugins so a developer moving between them recognizes the pattern immediately.
+All of these are in `components.css`, ready to paste. Class names are consistent across plugins so a developer moving between them recognizes the pattern immediately. All of them are plain HTML + CSS — see Section 0 for why `fig-*` tags are off the table.
 
 | Component | Class(es) | Notes |
 |---|---|---|
@@ -62,6 +72,8 @@ All of these are in `components.css`, ready to paste. Class names are consistent
 | Section label | `.section-label` | Small uppercase heading above a group of controls |
 | Brand footer | `.brand-footer` / `.brand-link` | Plugin name · version · links, consistent across all plugins |
 | **Log panel** | `.log-section` / `.log-list` / `.log-entry` | See below — this is the newest, most important addition |
+| Color input | native `<input type="color">`, styled `.color-input` | A real browser color input — no Figma-native picker is reachable from a plugin iframe |
+| Range slider | native `<input type="range">`, styled `.weight-slider` + a synced numeric `<span>`/`<input>` | Pair with a JS `input` listener to mirror the value into a visible number |
 
 Two components are distinctive enough to be worth lifting wholesale from where they were pioneered rather than re-described here — go read the source directly:
 - **Custom dropdown/select** (positions itself, flips up when out of space, icon + label rows) — `figma-selector/ui.html`, search for `.select-trigger`/`.select-dropdown`.
@@ -160,7 +172,7 @@ Call `log('info', ...)` or `log('error', ...)` at every point the plugin already
 
 | Plugin | themeColors | Font | Log panel |
 |---|---|---|---|
-| figma-connector | ✅ | Plus Jakarta Sans / JetBrains Mono | ✅ (pioneered here) |
+| figma-arrow-manager | ✅ | Plus Jakarta Sans / JetBrains Mono | ✅ (pioneered here) |
 | figma-linter | migrated | migrated | added |
 | figma-selector | migrated | migrated | added |
 | figma-relinker | migrated | migrated | added |
