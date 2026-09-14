@@ -1,0 +1,9 @@
+{
+  "name": "Instance Property Resetter",
+  "id": "instance-resetter-001",
+  "api": "1.0.0",
+  "main": "code.js",
+  "ui": "ui.html",
+  "editorType": ["figma"],
+  "documentAccess": "dynamic-page"
+}

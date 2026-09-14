@@ -1,0 +1,460 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Figlink</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Cal+Sans&family=DM+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg-canvas:      #141414;
+      --bg-panel:       #1a1a1a;
+      --bg-surface:     #1e1e1e;
+      --bg-hover:       #242424;
+      --border:         #2a2a2a;
+      --border-sub:     #1f1f1f;
+      --text-primary:   #e0e0e0;
+      --text-body:      #c0c0c0;
+      --text-secondary: #888888;
+      --text-muted:     #4a4a4a;
+      --accent:         #f59e0b;
+      --error:          #f87171;
+      --warning:        #fb923c;
+      --success:        #4ade80;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: 'DM Sans', system-ui, sans-serif;
+      font-size: 13px;
+      background: var(--bg-canvas);
+      color: var(--text-body);
+      display: flex;
+      flex-direction: column;
+      overflow-y: auto;
+      overflow-x: hidden;
+      min-height: 100vh;
+    }
+
+    .main {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 9px;
+      padding: 26px 29px 17px;
+      min-height: 148px;
+    }
+
+    .status-container {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 9px;
+      flex: 1;
+      justify-content: center;
+    }
+
+    .status {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      font-size: 15px;
+      color: var(--text-primary);
+      flex-shrink: 0;
+    }
+
+    .dot {
+      width: 12px;
+      height: 12px;
+      border-radius: 50%;
+      background: #444;
+      flex-shrink: 0;
+      transition: background 0.3s;
+    }
+    .dot.connected  { background: var(--success); }
+    .dot.connecting { background: var(--warning); animation: pulse 1.2s ease-in-out infinite; }
+    .dot.error      { background: var(--error); }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50%       { opacity: 0.25; }
+    }
+
+    .sub {
+      font-size: 14px;
+      color: var(--text-muted);
+      letter-spacing: 0.01em;
+      flex-shrink: 0;
+    }
+
+    .hint {
+      display: none;
+      flex-direction: column;
+      gap: 0;
+      width: 100%;
+      padding: 0 29px 9px;
+      flex-shrink: 0;
+    }
+    .hint.visible { display: flex; }
+
+    .hint-row {
+      display: flex;
+      align-items: baseline;
+      gap: 15px;
+      padding: 10px 0;
+      border-top: 1px solid var(--border-sub);
+    }
+    .hint-row:first-child { border-top: none; }
+
+    .hint-os {
+      font-size: 12px;
+      color: #555;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      flex-shrink: 0;
+      width: 90px;
+    }
+    .hint-os.active { color: var(--text-secondary); }
+
+    .hint-action {
+      font-size: 13px;
+      color: #505050;
+      line-height: 1.4;
+    }
+    .hint-action.active { color: var(--text-body); }
+
+    .hint-action code {
+      font-family: 'DM Sans', monospace;
+      font-size: 12px;
+      background: var(--bg-surface);
+      color: var(--text-secondary);
+      padding: 2px 8px;
+      border-radius: 3px;
+      letter-spacing: 0.02em;
+    }
+    .hint-action.active code { color: #bbb; }
+    .hint-action em { font-style: normal; color: #555; }
+    .hint-dimmed { color: #2a2a2a; }
+
+    .banner {
+      display: none;
+      flex-direction: column;
+      gap: 12px;
+      margin: 0 17px 17px;
+      padding: 17px 20px;
+      background: #1c1500;
+      border: 1px solid #3a2c00;
+      border-radius: 9px;
+      flex-shrink: 0;
+    }
+    .banner.visible { display: flex; }
+
+    .banner-title {
+      font-size: 12px;
+      color: var(--accent);
+      display: flex;
+      align-items: center;
+      gap: 9px;
+    }
+    .banner-title::before {
+      content: '⚠';
+      font-size: 12px;
+    }
+
+    .banner-body {
+      font-size: 12px;
+      color: #8a7040;
+      line-height: 1.5;
+      display: -webkit-box;
+      -webkit-line-clamp: 2;
+      -webkit-box-orient: vertical;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .reload-btn {
+      width: 100%;
+      padding: 12px 0;
+      background: var(--accent);
+      color: #0d0900;
+      border: none;
+      border-radius: 6px;
+      font-family: inherit;
+      font-size: 13px;
+      font-weight: 500;
+      cursor: pointer;
+      letter-spacing: 0.01em;
+      transition: background 0.15s;
+      margin-top: 1px;
+    }
+    .reload-btn:hover  { background: #fbbf24; }
+    .reload-btn:active { background: #d97706; }
+
+    .shortcut {
+      font-size: 12px;
+      color: #4a3a10;
+      text-align: center;
+      letter-spacing: 0.01em;
+    }
+
+    .footer {
+      border-top: 1px solid var(--border-sub);
+      padding: 0 20px;
+      height: 58px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      flex-shrink: 0;
+      background: var(--bg-canvas);
+    }
+
+    .footer-brand {
+      font-family: 'Cal Sans', sans-serif;
+      font-size: 12px;
+      color: #fff;
+      letter-spacing: 0.04em;
+    }
+
+    .footer-version {
+      font-size: 11px;
+      color: var(--text-muted);
+      margin-left: 2px;
+    }
+
+    .footer-sep {
+      color: var(--border);
+      font-size: 12px;
+    }
+
+    .footer-link {
+      font-size: 12px;
+      cursor: pointer;
+      color: rgba(255, 255, 255, 0.45);
+      background: none;
+      border: none;
+      font-family: inherit;
+      padding: 0;
+      transition: color 0.15s;
+    }
+    .footer-link:hover { color: #fff; }
+  </style>
+</head>
+<body>
+
+  <!-- Status -->
+  <div class="main">
+    <div class="status-container">
+      <div class="status">
+        <span class="dot connecting" id="dot"></span>
+        <span id="label">Connecting…</span>
+      </div>
+      <div class="sub" id="sub">Starting up…</div>
+    </div>
+  </div>
+
+  <!-- Start instructions (shown when not connected) -->
+  <div class="hint" id="hint">
+    <div class="hint-row" id="rowMac">
+      <span class="hint-os" id="osMac">Mac</span>
+      <span class="hint-action" id="actionMac">
+        Double-click <code>Mac Start Figlink.command</code> in Finder
+      </span>
+    </div>
+    <div class="hint-row" id="rowWin">
+      <span class="hint-os" id="osWin">Windows</span>
+      <span class="hint-action" id="actionWin">
+        Double-click <code>Windows Start Figlink.bat</code>
+      </span>
+    </div>
+    <div class="hint-row">
+      <span class="hint-os hint-dimmed">or</span>
+      <span class="hint-action hint-dimmed">
+        Open terminal <em>inside the figlink folder</em>, run <code>node start.js</code>
+      </span>
+    </div>
+  </div>
+
+  <!-- Code-changed banner -->
+  <div class="banner" id="banner">
+    <div class="banner-title">Update available</div>
+    <div class="banner-body">
+      A new version is ready. Close and reopen the plugin to apply it.
+    </div>
+    <button type="button" class="reload-btn" id="reloadBtn">Close Plugin</button>
+    <div class="shortcut">Re-run shortcut &nbsp;·&nbsp; ⌘⌥P on Mac &nbsp;·&nbsp; Ctrl+Alt+P on Windows</div>
+  </div>
+
+  <!-- Footer -->
+  <footer class="footer">
+    <span class="footer-brand">Figlink</span>
+    <span class="footer-version">v1.0</span>
+    <span class="footer-sep">|</span>
+    <button type="button" class="footer-link" id="xLink">x.com/danielfransix</button>
+    <span class="footer-sep">|</span>
+    <button type="button" class="footer-link" id="coffeeLink">☕ Buy me a coffee</button>
+  </footer>
+
+  <script>
+    const LINK_URL = 'ws://localhost:9001';
+
+    const dot    = document.getElementById('dot');
+    const label  = document.getElementById('label');
+    const sub    = document.getElementById('sub');
+    const hint   = document.getElementById('hint');
+    const banner = document.getElementById('banner');
+
+    let ws = null;
+    let retryTimer = null;
+    let retryAttempt = 0;
+    let pendingMessages = [];
+    let bannerVisible = false;
+    let fileInfo = null; // { fileKey, fileName } — received from code.js on load
+
+    // ── OS detection ──────────────────────────────────────────────────────────
+    const platform = (navigator.platform || '').toUpperCase();
+    const ua       = (navigator.userAgent || '').toUpperCase();
+    const isMac    = platform.includes('MAC') || ua.includes('MAC');
+    const isWin    = platform.includes('WIN') || ua.includes('WINDOWS');
+
+    // Highlight the active OS row
+    if (isMac) {
+      document.getElementById('osMac').classList.add('active');
+      document.getElementById('actionMac').classList.add('active');
+    } else if (isWin) {
+      document.getElementById('osWin').classList.add('active');
+      document.getElementById('actionWin').classList.add('active');
+    } else {
+      // Unknown — highlight both
+      document.getElementById('osMac').classList.add('active');
+      document.getElementById('actionMac').classList.add('active');
+      document.getElementById('osWin').classList.add('active');
+      document.getElementById('actionWin').classList.add('active');
+    }
+
+    // ── State helpers ─────────────────────────────────────────────────────────
+    function setState(state, text, detail) {
+      dot.className = 'dot ' + state;
+      label.textContent = text;
+      if (detail !== undefined) sub.textContent = detail;
+    }
+
+    function showHint() {
+      hint.classList.add('visible');
+    }
+
+    function hideHint() {
+      hint.classList.remove('visible');
+    }
+
+    function showBanner() {
+      bannerVisible = true;
+      banner.classList.add('visible');
+    }
+
+    // ── WebSocket ─────────────────────────────────────────────────────────────
+    function connect() {
+      clearTimeout(retryTimer);
+      if (ws) { try { ws.close(); } catch (_) {} }
+
+      setState('connecting', 'Connecting…', 'Waiting for link server…');
+      showHint();
+
+      ws = new WebSocket(LINK_URL);
+
+      ws.onopen = () => {
+        retryAttempt = 0; // Reset backoff on successful connection
+        ws.send(JSON.stringify({ type: 'register', role: 'plugin', ...(fileInfo || {}) }));
+        pendingMessages.forEach(msg => ws.send(JSON.stringify(msg)));
+        pendingMessages = [];
+      };
+
+      ws.onmessage = (event) => {
+        let msg;
+        try { msg = JSON.parse(event.data); } catch { return; }
+
+        if (msg.type === 'registered') {
+          const detail = fileInfo ? `${fileInfo.fileName} · ready` : 'Linked · ready for commands';
+          setState('connected', 'Connected', detail);
+          hideHint();
+          return;
+        }
+
+        if (msg.type === 'code_changed') {
+          showBanner();
+          return;
+        }
+
+        parent.postMessage({ pluginMessage: msg }, '*');
+      };
+
+      ws.onerror = () => {
+        setState('error', 'Link not running', 'Server is not running yet');
+        showHint();
+      };
+
+      ws.onclose = () => {
+        if (dot.className.includes('connected')) {
+          setState('connecting', 'Reconnecting…', 'Link server stopped');
+          showHint();
+        }
+        clearTimeout(retryTimer);
+        // Exponential backoff with jitter: 2.5s, 5s, 10s, 20s, 30s max
+        const delay = Math.min(30000, 2500 * Math.pow(2, retryAttempt)) + Math.floor(Math.random() * 500);
+        retryAttempt++;
+        retryTimer = setTimeout(connect, delay);
+      };
+    }
+
+    // Result from main thread → WebSocket → link server → client
+    window.onmessage = (event) => {
+      const msg = event.data && event.data.pluginMessage;
+      if (!msg) return;
+
+      // File identity sent by code.js on plugin load — store and (re-)register if WS is already open
+      if (msg.type === 'file_info') {
+        fileInfo = { fileKey: msg.fileKey, fileName: msg.fileName };
+        if (ws && ws.readyState === WebSocket.OPEN) {
+          ws.send(JSON.stringify({ type: 'register', role: 'plugin', ...fileInfo }));
+        }
+        return;
+      }
+
+      if (ws && ws.readyState === WebSocket.OPEN) {
+        ws.send(JSON.stringify(msg));
+      } else {
+        if (pendingMessages.length >= 10) {
+          pendingMessages.shift();
+          setState('connecting', 'Reconnecting…', 'Buffer full — some messages may be lost');
+        }
+        pendingMessages.push(msg);
+      }
+    };
+
+    document.getElementById('reloadBtn').addEventListener('click', () => {
+      parent.postMessage({ pluginMessage: { type: 'close_plugin' } }, '*');
+    });
+
+    document.getElementById('xLink').addEventListener('click', () => {
+      parent.postMessage({ pluginMessage: { type: 'open_url', url: 'https://x.com/danielfransix' } }, '*');
+    });
+
+    document.getElementById('coffeeLink').addEventListener('click', () => {
+      parent.postMessage({ pluginMessage: { type: 'open_url', url: 'https://danielfransix.short.gy/buy-coffee' } }, '*');
+    });
+
+    // Auto-resize to hug contents
+    const resizeObserver = new ResizeObserver(() => {
+      const height = document.body.offsetHeight;
+      parent.postMessage({ pluginMessage: { type: 'resize', height: height } }, '*');
+    });
+    resizeObserver.observe(document.body);
+
+    connect();
+  </script>
+</body>
+</html>

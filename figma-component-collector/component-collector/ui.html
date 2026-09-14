@@ -1,0 +1,775 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Component Collector</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600&family=JetBrains+Mono:wght@400&display=swap" rel="stylesheet">
+  <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.min.js"></script>
+  <style>
+    :root {
+      /* Aliased to Figma's own injected theme (figma.showUI({ themeColors: true })),
+         so this plugin auto-matches the user's real light/dark Figma theme. */
+      --color-bg:             var(--figma-color-bg, #2C2C2C);
+      --color-bg-secondary:   var(--figma-color-bg-secondary, #383838);
+      --color-border:         var(--figma-color-border, #444444);
+      --color-border-menu:    var(--figma-color-border, #383838);
+      --color-text:           var(--figma-color-text, #FFFFFF);
+      --color-text-secondary: var(--figma-color-text-secondary, rgba(255,255,255,0.7));
+      --color-text-tertiary:  var(--figma-color-text-tertiary, rgba(255,255,255,0.4));
+      --color-text-onbrand:   var(--figma-color-text-onbrand, #FFFFFF);
+      --color-bg-brand:       var(--figma-color-bg-brand, #0C8CE9);
+      --color-bg-hover:       var(--figma-color-bg-brand-hover, #006dcf);
+      --color-bg-menu:        var(--figma-color-bg-tertiary, #1e1e1e);
+      --font-body-md-size:    15px;
+      --font-body-md-lh:      22px;
+      --font-body-sm-size:    14px;
+      --font-body-sm-lh:      20px;
+      --font-mono:            'JetBrains Mono', Consolas, monospace;
+      --success: var(--figma-color-text-success, #4ade80);
+      --error:   var(--figma-color-text-danger, #f87171);
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    html, body { width: 390px; height: 600px; overflow: hidden; }
+
+    body {
+      font-family: 'Plus Jakarta Sans', system-ui, sans-serif;
+      font-size: var(--font-body-md-size);
+      font-weight: 400;
+      line-height: var(--font-body-md-lh);
+      color: var(--color-text);
+      background: var(--color-bg);
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    /* ── Scrollable content area (everything above the fixed footer) ── */
+    .scroll-area {
+      flex: 1;
+      min-height: 0;
+      overflow-y: auto;
+      display: flex;
+      flex-direction: column;
+    }
+
+    /* ── Content header ── */
+    .content-header {
+      padding: 16px 24px 8px;
+      flex-shrink: 0;
+    }
+
+    .section-title {
+      font-family: 'Plus Jakarta Sans', sans-serif;
+      font-size: 17px;
+      font-weight: 600;
+      line-height: 24px;
+      letter-spacing: -0.085px;
+      color: var(--color-text);
+    }
+
+    /* ── Description block ── */
+    .description-block {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      padding: 20px 24px;
+      flex-shrink: 0;
+    }
+
+    .description-block p {
+      font-size: var(--font-body-sm-size);
+      line-height: var(--font-body-sm-lh);
+      color: var(--color-text-secondary);
+      letter-spacing: -0.035px;
+    }
+
+    /* ── Divider ── */
+    .divider {
+      width: 100%;
+      height: 1px;
+      background: var(--color-border);
+      flex-shrink: 0;
+    }
+
+    /* ── Section: filter ── */
+    .section-filter {
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+      padding: 24px;
+      flex-shrink: 0;
+    }
+
+    /* ── Section: status ── */
+    .section-status {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      padding: 24px;
+      flex-shrink: 0;
+    }
+
+    /* ── Section header (icon + label) ── */
+    .section-header {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding-bottom: 8px;
+    }
+
+    .section-icon {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+      width: 18px;
+      height: 18px;
+      color: var(--color-text);
+    }
+
+    .section-label {
+      font-family: 'Plus Jakarta Sans', sans-serif;
+      font-size: var(--font-body-md-size);
+      font-weight: 500;
+      line-height: var(--font-body-md-lh);
+      letter-spacing: -0.0375px;
+      color: var(--color-text);
+    }
+
+    /* ── Property row (checkbox + text stack) ── */
+    .property-row {
+      display: flex;
+      align-items: flex-start;
+      gap: 12px;
+      cursor: pointer;
+      -webkit-user-select: none;
+      user-select: none;
+    }
+
+    .prop-check {
+      width: 22px;
+      height: 22px;
+      border: 1.5px solid var(--color-border);
+      border-radius: 2px;
+      background: var(--color-bg-secondary);
+      flex-shrink: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: all 0.15s;
+    }
+
+    .property-row.checked .prop-check {
+      background: var(--color-bg-brand);
+      border-color: var(--color-bg-brand);
+      color: #fff;
+    }
+
+    .check-svg { display: none; }
+    .property-row.checked .check-svg { display: block; }
+
+    .prop-text-stack {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+    }
+
+    .prop-name {
+      font-size: var(--font-body-md-size);
+      line-height: var(--font-body-md-lh);
+      color: var(--color-text-secondary);
+      letter-spacing: -0.0375px;
+      transition: color 0.15s;
+    }
+
+    .property-row.checked .prop-name { color: var(--color-text); }
+
+    .prop-desc {
+      font-size: var(--font-body-sm-size);
+      line-height: var(--font-body-sm-lh);
+      color: var(--color-text-secondary);
+      letter-spacing: -0.035px;
+    }
+
+    /* ── Range inputs ── */
+    .range-inputs {
+      display: none;
+      align-items: center;
+      gap: 12px;
+    }
+    .range-inputs.visible { display: flex; }
+
+    .input-group {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex: 1;
+      min-width: 0;
+    }
+
+    .range-label {
+      font-size: var(--font-body-sm-size);
+      line-height: var(--font-body-sm-lh);
+      color: var(--color-text-secondary);
+      white-space: nowrap;
+    }
+
+    .range-input {
+      flex: 1;
+      min-width: 0;
+      height: 28px;
+      padding: 4px 8px;
+      background: var(--color-bg);
+      border: 2px solid var(--color-border);
+      border-radius: 5px;
+      color: var(--color-text);
+      font-family: inherit;
+      font-size: var(--font-body-md-size);
+      line-height: var(--font-body-md-lh);
+      -moz-appearance: textfield;
+      appearance: textfield;
+    }
+    .range-input::-webkit-outer-spin-button,
+    .range-input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+    .range-input:focus { outline: none; border-color: var(--color-bg-brand); }
+
+    .range-sep  { font-size: var(--font-body-sm-size); color: var(--color-text-secondary); flex-shrink: 0; }
+    .range-unit { font-size: var(--font-body-sm-size); color: var(--color-text-secondary); flex-shrink: 0; }
+
+    /* ── Status row ── */
+    .status-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .status-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--color-border);
+      flex-shrink: 0;
+      transition: background 0.3s;
+    }
+    .status-dot.running { background: var(--color-bg-brand); animation: pulse 1.2s ease-in-out infinite; }
+    .status-dot.done    { background: var(--success); }
+    .status-dot.error   { background: var(--error); }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50%       { opacity: 0.25; }
+    }
+
+    .status-text {
+      font-size: var(--font-body-sm-size);
+      line-height: var(--font-body-sm-lh);
+      color: var(--color-text-secondary);
+      letter-spacing: -0.035px;
+    }
+    .status-text.active { color: var(--color-text); }
+
+    /* ── Footer ── */
+    .footer {
+      background: var(--color-bg-menu);
+      border-top: 2px solid var(--color-border);
+      flex-shrink: 0;
+      margin-top: auto;
+      overflow: hidden;
+    }
+
+    .footer-actions { padding: 24px; }
+
+    .run-btn {
+      width: 100%;
+      height: 36px;
+      padding: 0 20px;
+      background: var(--color-bg-brand);
+      color: var(--color-text-onbrand);
+      border: none;
+      border-radius: 5px;
+      font-family: inherit;
+      font-size: var(--font-body-md-size);
+      font-weight: 400;
+      line-height: var(--font-body-md-lh);
+      letter-spacing: -0.0375px;
+      cursor: pointer;
+      transition: background 0.15s;
+    }
+    .run-btn:hover   { background: var(--color-bg-hover); }
+    .run-btn:active  { background: #004fa3; }
+    .run-btn:disabled {
+      background: var(--color-bg-secondary);
+      color: var(--color-text-secondary);
+      cursor: not-allowed;
+    }
+
+    .footer-branding {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      padding: 0 24px 24px;
+    }
+
+    .footer-branding > span,
+    .footer-branding > button {
+      font-size: var(--font-body-sm-size);
+      line-height: var(--font-body-sm-lh);
+      color: var(--color-text-secondary);
+      letter-spacing: -0.035px;
+    }
+
+    .footer-link {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      background: none;
+      border: none;
+      font-family: inherit;
+      padding: 0;
+      cursor: pointer;
+      transition: color 0.15s;
+    }
+    .footer-link:hover { color: var(--color-text) !important; }
+
+    .dot-sep {
+      width: 3px;
+      height: 3px;
+      border-radius: 50%;
+      background: var(--color-text-secondary);
+      flex-shrink: 0;
+    }
+
+    /* ── Section: diagnostics ── */
+    .section-diagnostics {
+      display: none;
+      flex-direction: column;
+      gap: 12px;
+      padding: 24px;
+      flex-shrink: 0;
+      overflow: hidden;
+    }
+    .section-diagnostics.visible { display: flex; }
+
+    .diag-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      font-size: var(--font-body-sm-size);
+      line-height: var(--font-body-sm-lh);
+      color: var(--color-text-secondary);
+      letter-spacing: -0.035px;
+    }
+    .diag-row span:last-child { color: var(--color-text); }
+
+    .diag-log {
+      height: 90px;
+      overflow-y: auto;
+      background: var(--color-bg-secondary);
+      border: 1px solid var(--color-border);
+      border-radius: 5px;
+      padding: 8px 10px;
+      font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
+      font-size: 12px;
+      line-height: 18px;
+      color: var(--color-text-secondary);
+    }
+    .diag-log .diag-empty { color: var(--color-text-secondary); opacity: 0.6; }
+    .diag-log .diag-slow  { color: var(--error); }
+
+    /* ── Standard activity log (separate from the diagnostics panel above) ── */
+    .log-section { display: flex; flex-direction: column; gap: 8px; padding: 24px; flex-shrink: 0; }
+    .log-header { display: flex; align-items: center; justify-content: space-between; }
+    .copy-log-btn {
+      display: flex; align-items: center; gap: 5px;
+      background: transparent; border: 1px solid var(--color-border); border-radius: 5px;
+      color: var(--color-text-secondary); font-size: var(--font-body-sm-size); font-family: inherit;
+      padding: 4px 8px; cursor: pointer; transition: background 0.1s, color 0.1s;
+    }
+    .copy-log-btn:hover { background: var(--color-bg-secondary); color: var(--color-text); }
+    .copy-log-btn.copied { color: var(--color-bg-brand); border-color: var(--color-bg-brand); }
+    .log-list {
+      max-height: 100px; overflow-y: auto;
+      background: var(--color-bg-secondary); border: 1px solid var(--color-border); border-radius: 6px;
+      padding: 8px 10px;
+      font-family: var(--font-mono);
+      font-size: 12px; line-height: 18px;
+    }
+    .log-empty { color: var(--color-text-secondary); }
+    .log-entry { color: var(--color-text-secondary); white-space: pre-wrap; word-break: break-word; }
+    .log-entry.error { color: var(--error); }
+    .log-entry .log-time { color: var(--color-text-tertiary); margin-right: 6px; }
+
+    .diag-copy-btn {
+      margin-left: auto;
+      background: none;
+      border: 1px solid var(--color-border);
+      border-radius: 5px;
+      color: var(--color-text-secondary);
+      font-family: inherit;
+      font-size: 12px;
+      line-height: 18px;
+      padding: 4px 8px;
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+    .diag-copy-btn:hover { color: var(--color-text); border-color: var(--color-text-secondary); }
+  </style>
+</head>
+<body>
+
+  <div class="scroll-area">
+
+  <!-- Content header -->
+  <div class="content-header">
+    <span class="section-title">Component Collector</span>
+  </div>
+
+  <!-- Description -->
+  <div class="description-block">
+    <p>Scans every page and gathers all master components onto a single dedicated page.</p>
+    <p>Components embedded inside designs are replaced with instances in place before being moved.</p>
+  </div>
+
+  <div class="divider"></div>
+
+  <!-- Filter section -->
+  <div class="section-filter">
+    <div class="section-header">
+      <div class="section-icon">
+        <i data-lucide="filter" width="18" height="18" stroke-width="2"></i>
+      </div>
+      <span class="section-label">FILTER</span>
+    </div>
+
+    <div class="property-row" id="widthFilterItem">
+      <div class="prop-check">
+        <i data-lucide="check" class="check-svg" width="14" height="14" stroke-width="2.5"></i>
+      </div>
+      <div class="prop-text-stack">
+        <span class="prop-name">Filter by width</span>
+        <span class="prop-desc">Skip components outside this width range</span>
+      </div>
+    </div>
+
+    <div class="range-inputs" id="widthRange">
+      <div class="input-group">
+        <span class="range-label">Min</span>
+        <input class="range-input" type="number" id="minWidth" value="0" min="0" placeholder="0">
+      </div>
+      <span class="range-sep">—</span>
+      <div class="input-group">
+        <span class="range-label">Max</span>
+        <input class="range-input" type="number" id="maxWidth" min="0" placeholder="∞">
+        <span class="range-unit">px</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="divider"></div>
+
+  <!-- Status section -->
+  <div class="section-status">
+    <div class="section-header">
+      <div class="section-icon">
+        <i data-lucide="info" width="18" height="18" stroke-width="2"></i>
+      </div>
+      <span class="section-label">STATUS</span>
+    </div>
+    <div class="status-row">
+      <div class="status-dot" id="statusDot"></div>
+      <span class="status-text" id="statusText">Ready — press Collect to begin.</span>
+    </div>
+  </div>
+
+  <div class="divider"></div>
+
+  <!-- Diagnostics section (yield-throttling test) -->
+  <div class="section-diagnostics" id="diagnosticsSection">
+    <div class="section-header">
+      <div class="section-icon">
+        <i data-lucide="activity" width="18" height="18" stroke-width="2"></i>
+      </div>
+      <span class="section-label">DIAGNOSTICS</span>
+      <button type="button" class="diag-copy-btn" id="copyDiagBtn">Copy logs</button>
+    </div>
+    <div class="diag-row">
+      <span>Yield method</span>
+      <span id="diagYieldMethod">—</span>
+    </div>
+    <div class="diag-row">
+      <span>Slow yields</span>
+      <span id="diagSlowSummary">0 (0ms total)</span>
+    </div>
+    <div class="diag-row">
+      <span>Window</span>
+      <span id="diagWindowState">Focused</span>
+    </div>
+    <div class="diag-log" id="diagLog"><span class="diag-empty">No slow yields yet.</span></div>
+  </div>
+
+  <div class="divider"></div>
+
+  <!-- Log (general activity/errors — distinct from the perf Diagnostics panel above) -->
+  <div class="log-section">
+    <div class="log-header">
+      <span class="section-label">LOG</span>
+      <button type="button" class="copy-log-btn" id="copyLogBtn">
+        <svg width="12" height="12" viewBox="0 0 12 12" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <rect x="4" y="4" width="7" height="7" rx="1" stroke="currentColor" stroke-width="1.1"/>
+          <path d="M2.5 8V2.5C2.5 1.94772 2.94772 1.5 3.5 1.5H8" stroke="currentColor" stroke-width="1.1"/>
+        </svg>
+        <span id="copyLogLabel">Copy</span>
+      </button>
+    </div>
+    <div class="log-list" id="logList">
+      <div class="log-empty">No actions yet.</div>
+    </div>
+  </div>
+
+  <div class="divider"></div>
+
+  </div>
+
+  <!-- Footer -->
+  <footer class="footer">
+    <div class="footer-actions">
+      <button type="button" class="run-btn" id="runBtn">Collect Components</button>
+    </div>
+    <div class="footer-branding">
+      <span>Component Collector</span>
+      <span class="dot-sep"></span>
+      <span>v1.0</span>
+      <span class="dot-sep"></span>
+      <button type="button" class="footer-link" id="xLink">x.com/danielfransix</button>
+      <span class="dot-sep"></span>
+      <button type="button" class="footer-link" id="coffeeLink">
+        <i data-lucide="coffee" width="14" height="14" stroke-width="2"></i>
+        Buy me a coffee
+      </button>
+    </div>
+  </footer>
+
+  <script>
+    var running = false;
+    var slowYieldCount = 0;
+    var slowYieldTotalMs = 0;
+
+    function pad2(n) { return n < 10 ? '0' + n : '' + n; }
+
+    function logDiag(text, isSlow) {
+      var log = document.getElementById('diagLog');
+      var empty = log.querySelector('.diag-empty');
+      if (empty) empty.remove();
+
+      var now = new Date();
+      var stamp = pad2(now.getHours()) + ':' + pad2(now.getMinutes()) + ':' + pad2(now.getSeconds());
+      var line = document.createElement('div');
+      if (isSlow) line.className = 'diag-slow';
+      line.textContent = stamp + ' — ' + text;
+      log.appendChild(line);
+
+      // Cap log length so it doesn't grow unbounded during long runs
+      while (log.children.length > 40) log.removeChild(log.firstChild);
+      log.scrollTop = log.scrollHeight;
+    }
+
+    document.getElementById('widthFilterItem').addEventListener('click', function() {
+      if (running) return;
+      this.classList.toggle('checked');
+      document.getElementById('widthRange').classList.toggle('visible', this.classList.contains('checked'));
+    });
+
+    document.getElementById('runBtn').addEventListener('click', function() {
+      if (running) return;
+      running = true;
+      document.getElementById('runBtn').disabled = true;
+      setStatus('running', 'Scanning pages…');
+
+      var minVal = parseFloat(document.getElementById('minWidth').value);
+      var maxVal = parseFloat(document.getElementById('maxWidth').value);
+      parent.postMessage({ pluginMessage: {
+        type: 'run',
+        widthFilter: {
+          enabled: document.getElementById('widthFilterItem').classList.contains('checked'),
+          min: isNaN(minVal) ? 0 : Math.max(0, minVal),
+          max: isNaN(maxVal) ? null : Math.max(0, maxVal),
+        },
+      } }, '*');
+    });
+
+    function setStatus(state, text) {
+      var dot   = document.getElementById('statusDot');
+      var label = document.getElementById('statusText');
+      dot.className   = 'status-dot' + (state ? ' ' + state : '');
+      label.className = 'status-text' + (state !== 'idle' ? ' active' : '');
+      label.textContent = text;
+    }
+
+    window.onmessage = function(event) {
+      var msg = event.data && event.data.pluginMessage;
+      if (!msg) return;
+
+      if (msg.type === 'progress') {
+        var text = 'Scanning page ' + msg.pageIndex + ' of ' + msg.pageTotal + ' — ' + msg.page;
+        if (msg.found > 0) text += ' · ' + msg.found + ' found';
+        setStatus('running', text);
+      }
+
+      if (msg.type === 'done') {
+        running = false;
+        document.getElementById('runBtn').disabled = false;
+
+        if (msg.collected === 0) {
+          setStatus('done', 'Done · No components found to collect.');
+          return;
+        }
+
+        var parts = [msg.collected + ' component' + (msg.collected !== 1 ? 's' : '') + ' collected'];
+        if (msg.replaced > 0) parts.push(msg.replaced + ' replaced with instance' + (msg.replaced !== 1 ? 's' : ''));
+        if (msg.skipped  > 0) parts.push(msg.skipped  + ' skipped');
+        setStatus('done', 'Done · ' + parts.join(' · '));
+      }
+
+      if (msg.type === 'error') {
+        running = false;
+        document.getElementById('runBtn').disabled = false;
+        setStatus('error', msg.message || 'Something went wrong.');
+      }
+
+      if (msg.type === 'debug_info') {
+        document.getElementById('diagnosticsSection').classList.add('visible');
+        document.getElementById('diagYieldMethod').textContent =
+          msg.messageChannelSupported ? 'MessageChannel' : 'setTimeout (fallback)';
+      }
+
+      if (msg.type === 'debug_yield') {
+        document.getElementById('diagnosticsSection').classList.add('visible');
+        slowYieldCount++;
+        slowYieldTotalMs += msg.duration;
+        document.getElementById('diagSlowSummary').textContent =
+          slowYieldCount + ' (' + slowYieldTotalMs + 'ms total)';
+        logDiag('work ' + msg.workMs + 'ms → yield ' + msg.duration + 'ms' + (msg.hidden ? ' [hidden]' : ''), true);
+      }
+
+      if (msg.type === 'log') addLogEntry(msg);
+    };
+
+    // ── Log panel (general activity/errors) ───────────────────────────────────
+    var logEntries = []; // { time, level, message }
+    var logList = document.getElementById('logList');
+    var copyLogBtn = document.getElementById('copyLogBtn');
+    var copyLogLabel = document.getElementById('copyLogLabel');
+
+    copyLogBtn.addEventListener('click', copyLogs);
+
+    function addLogEntry(entry) {
+      logEntries.push(entry);
+      var row = document.createElement('div');
+      row.className = 'log-entry' + (entry.level === 'error' ? ' error' : '');
+      var timeSpan = document.createElement('span');
+      timeSpan.className = 'log-time';
+      timeSpan.textContent = entry.time;
+      row.appendChild(timeSpan);
+      row.appendChild(document.createTextNode(entry.message));
+      if (logList.querySelector('.log-empty')) logList.innerHTML = '';
+      logList.appendChild(row);
+      logList.scrollTop = logList.scrollHeight;
+    }
+
+    function copyLogs() {
+      var text = logEntries.length
+        ? logEntries.map(function(e) { return '[' + e.time + '] ' + (e.level === 'error' ? 'ERROR: ' : '') + e.message; }).join('\n')
+        : 'No actions yet.';
+      var ta = document.createElement('textarea');
+      ta.value = text;
+      ta.style.position = 'fixed';
+      ta.style.opacity = '0';
+      document.body.appendChild(ta);
+      ta.focus();
+      ta.select();
+      try {
+        document.execCommand('copy');
+        copyLogLabel.textContent = 'Copied';
+        copyLogBtn.classList.add('copied');
+        setTimeout(function() { copyLogLabel.textContent = 'Copy'; copyLogBtn.classList.remove('copied'); }, 1200);
+      } catch (e) {
+        copyLogLabel.textContent = 'Failed';
+      }
+      document.body.removeChild(ta);
+    }
+
+    function reportVisibility() {
+      var hidden = document.hidden;
+      document.getElementById('diagnosticsSection').classList.add('visible');
+      document.getElementById('diagWindowState').textContent = hidden ? 'Hidden' : 'Focused';
+      logDiag(hidden ? 'window hidden — reducing yield frequency' : 'window visible again', false);
+      parent.postMessage({ pluginMessage: { type: 'visibility', hidden: hidden } }, '*');
+    }
+
+    document.addEventListener('visibilitychange', reportVisibility);
+
+    function fallbackCopy(str) {
+      var ta = document.createElement('textarea');
+      ta.value = str;
+      ta.style.position = 'fixed';
+      ta.style.opacity = '0';
+      document.body.appendChild(ta);
+      ta.focus();
+      ta.select();
+      try { document.execCommand('copy'); } catch (e) {}
+      document.body.removeChild(ta);
+    }
+
+    document.getElementById('copyDiagBtn').addEventListener('click', function() {
+      var btn = this;
+      var lines = [
+        'Yield method: ' + document.getElementById('diagYieldMethod').textContent,
+        'Slow yields: ' + document.getElementById('diagSlowSummary').textContent,
+        'Window: ' + document.getElementById('diagWindowState').textContent,
+        '',
+      ];
+      var logEntries = document.getElementById('diagLog').querySelectorAll('div');
+      if (logEntries.length === 0) {
+        lines.push('No slow yields yet.');
+      } else {
+        for (var i = 0; i < logEntries.length; i++) lines.push(logEntries[i].textContent);
+      }
+      var text = lines.join('\n');
+
+      function showCopied() {
+        btn.textContent = 'Copied!';
+        setTimeout(function() { btn.textContent = 'Copy logs'; }, 1500);
+      }
+
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(text).then(showCopied, function() {
+          fallbackCopy(text);
+          showCopied();
+        });
+      } else {
+        fallbackCopy(text);
+        showCopied();
+      }
+    });
+
+    parent.postMessage({ pluginMessage: { type: 'ui_ready' } }, '*');
+    parent.postMessage({ pluginMessage: { type: 'visibility', hidden: document.hidden } }, '*');
+
+    document.getElementById('xLink').addEventListener('click', function() {
+      parent.postMessage({ pluginMessage: { type: 'open_url', url: 'https://x.com/danielfransix' } }, '*');
+    });
+    document.getElementById('coffeeLink').addEventListener('click', function() {
+      parent.postMessage({ pluginMessage: { type: 'open_url', url: 'https://buymeacoffee.com/danielfransix' } }, '*');
+    });
+
+    if (window.lucide) lucide.createIcons();
+  </script>
+</body>
+</html>

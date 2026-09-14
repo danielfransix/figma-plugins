@@ -1,0 +1,1499 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Figma Selector</title>
+<script src="https://unpkg.com/lucide@latest/dist/umd/lucide.min.js"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600&family=JetBrains+Mono:wght@400&display=swap" rel="stylesheet">
+<style>
+:root {
+  /* Aliased to Figma's own injected theme (figma.showUI({ themeColors: true })),
+     so this plugin auto-matches the user's real light/dark Figma theme. */
+  --color-bg:             var(--figma-color-bg, #2C2C2C);
+  --color-bg-secondary:   var(--figma-color-bg-secondary, #383838);
+  --color-border:         var(--figma-color-border, #444444);
+  --color-border-menu:    var(--figma-color-border, #383838);
+  --color-border-strong:  var(--figma-color-border-strong, #555555);
+  --color-text:           var(--figma-color-text, #FFFFFF);
+  --color-text-secondary: var(--figma-color-text-secondary, rgba(255,255,255,0.7));
+  --color-text-tertiary:  var(--figma-color-text-tertiary, rgba(255,255,255,0.4));
+  --color-text-onbrand:   var(--figma-color-text-onbrand, #FFFFFF);
+  --color-bg-brand:       var(--figma-color-bg-brand, #0C8CE9);
+  --color-bg-selected:    var(--figma-color-bg-brand, #0D99FF);
+  --color-bg-hover:       var(--figma-color-bg-brand-hover, #006dcf);
+  --color-danger:         var(--figma-color-text-danger, #f87171);
+
+  --font-title-lg-size:    12px;
+  --font-title-lg-lh:      16px;
+  --font-title-md-size:    11px;
+  --font-title-md-lh:      16px;
+  --font-body-md-size:     11px;
+  --font-body-md-lh:       16px;
+  --font-body-sm-size:     11px;
+  --font-body-sm-lh:       16px;
+}
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  font-family: 'Plus Jakarta Sans', system-ui, sans-serif;
+  font-size: var(--font-body-md-size);
+  font-weight: 400;
+  line-height: var(--font-body-md-lh);
+  background: var(--color-bg);
+  color: var(--color-text);
+  overflow: hidden;
+  -webkit-user-select: none;
+  -moz-user-select: none;
+  user-select: none;
+}
+
+/* ── Layout ── */
+.plugin-wrap {
+  display: flex;
+  flex-direction: column;
+  height: 900px;
+  background: var(--color-bg);
+  overflow: hidden;
+}
+
+/* ── Header ── */
+.content-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 16px 24px 8px;
+  flex-shrink: 0;
+}
+.header-icon { color: var(--color-text); display: flex; align-items: center; }
+.header-title {
+  font-family: 'Plus Jakarta Sans', sans-serif;
+  font-weight: 600;
+  font-size: var(--font-title-lg-size);
+  color: var(--color-text);
+  letter-spacing: var(--font-title-lg-ls);
+  line-height: var(--font-title-lg-lh);
+}
+
+/* ── Scroll container ── */
+.scroll-container {
+  flex: 1;
+  position: relative;
+  overflow: hidden;
+  min-height: 0;
+}
+
+.scrollable-body {
+  height: 100%;
+  overflow-y: scroll;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+.scrollable-body::-webkit-scrollbar { display: none; }
+
+/* ── Custom scrollbar ── */
+.scrollbar-track {
+  position: absolute;
+  right: 8px;
+  top: 8px;
+  bottom: 8px;
+  width: 8px;
+  pointer-events: none;
+}
+.scrollbar-thumb {
+  position: absolute;
+  width: 8px;
+  border-radius: 2px;
+  background: var(--color-border);
+  cursor: grab;
+  pointer-events: all;
+  display: none;
+  transition: background 0.15s;
+}
+.scrollbar-thumb:hover { background: #555; }
+.scrollbar-thumb.dragging { background: #666; cursor: grabbing; }
+
+/* ── Section ── */
+.section { padding: 24px 24px; }
+
+.divider { height: 1px; background: var(--color-border); }
+
+.section-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 28px;
+}
+
+.section-icon { display: flex; align-items: center; color: var(--color-text); flex-shrink: 0; }
+.section-icon.active { color: var(--color-bg-brand); }
+
+.section-label {
+  font-family: 'Plus Jakarta Sans', sans-serif;
+  font-size: var(--font-title-md-size);
+  font-weight: 500;
+  color: var(--color-text);
+  letter-spacing: var(--font-title-md-ls);
+  line-height: var(--font-title-md-lh);
+  flex: 1;
+}
+.section-label.active { color: var(--color-text); }
+
+/* ── Chips ── */
+.chip-group { display: flex; flex-wrap: wrap; gap: 8px; }
+
+.chip {
+  padding: 6px 12px;
+  border-radius: 5px;
+  border: 2px solid var(--color-border);
+  background: var(--color-bg);
+  color: var(--color-text);
+  font-size: var(--font-body-md-size);
+  font-weight: 400;
+  font-family: inherit;
+  cursor: pointer;
+  line-height: var(--font-body-md-lh);
+  letter-spacing: var(--font-body-md-ls);
+  white-space: nowrap;
+  transition: background 0.1s, border-color 0.1s, color 0.1s;
+}
+.chip:hover:not(.disabled) { background: #282828; }
+.chip.active { background: var(--color-bg-brand); border-color: transparent; color: var(--color-text-onbrand); }
+.chip.disabled { opacity: 0.35; cursor: not-allowed; }
+
+/* ── Name section ── */
+.name-row { display: flex; gap: 6px; align-items: center; }
+.name-input-wrap { flex: 1; position: relative; display: flex; align-items: center; }
+.name-input-icon {
+  position: absolute;
+  left: 10px;
+  color: var(--color-text-secondary);
+  display: flex;
+  align-items: center;
+  pointer-events: none;
+}
+.name-input {
+  width: 100%;
+  height: 36px;
+  background: var(--color-bg);
+  border: 2px solid var(--color-border);
+  border-radius: 6px;
+  color: var(--color-text);
+  font-size: var(--font-body-md-size);
+  font-weight: 400;
+  font-family: inherit;
+  padding: 0 10px 0 32px;
+  outline: none;
+  transition: border-color 0.15s;
+}
+.name-input::placeholder { color: var(--color-text-secondary); }
+.name-input:focus { border-color: rgba(255,255,255,0.35); }
+
+.name-toggle {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 6px;
+  border: 2px solid var(--color-border);
+  background: var(--color-bg);
+  color: var(--color-text-secondary);
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: background 0.1s, border-color 0.1s, color 0.1s;
+}
+.name-toggle:hover { background: #282828; }
+.name-toggle.active { border-color: rgba(255,255,255,0.35); color: var(--color-text); }
+.name-toggle[title]:hover::after {
+  content: attr(title);
+  position: absolute;
+  bottom: calc(100% + 4px);
+  left: 50%;
+  transform: translateX(-50%);
+  background: #111;
+  color: #ccc;
+  font-size: 10px;
+  padding: 3px 6px;
+  border-radius: 4px;
+  white-space: nowrap;
+  pointer-events: none;
+  z-index: 100;
+}
+
+/* ── Show more ── */
+.show-more-btn {
+  padding: 6px 12px;
+  border-radius: 5px;
+  border: 2px dashed var(--color-border);
+  background: transparent;
+  color: var(--color-text-secondary);
+  font-size: var(--font-body-md-size);
+  font-weight: 400;
+  font-family: inherit;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  line-height: var(--font-body-md-lh);
+  transition: color 0.1s, border-color 0.1s;
+}
+.show-more-btn:hover { color: var(--color-text); border-color: #555; }
+.show-more-row { display: none; }
+.show-more-row.visible { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
+
+/* ── Conditions header ── */
+.add-condition-btn {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 5px 10px;
+  border-radius: 5px;
+  border: 2px solid var(--color-border);
+  background: var(--color-bg);
+  color: var(--color-text);
+  font-size: var(--font-body-md-size);
+  font-weight: 400;
+  font-family: inherit;
+  cursor: pointer;
+  transition: background 0.1s;
+  flex-shrink: 0;
+}
+.add-condition-btn:hover { background: #282828; }
+
+/* ── Condition rows ── */
+.condition-row {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  margin-bottom: 6px;
+}
+
+/* ── Custom select ── */
+.custom-select { position: relative; }
+.custom-select.prop { flex: 0 0 120px; }
+.custom-select.op  { flex: 1; min-width: 0; }
+
+.select-trigger {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 8px 0 10px;
+  height: 36px;
+  background: var(--color-bg);
+  border: 2px solid var(--color-border);
+  border-radius: 5px;
+  cursor: pointer;
+  transition: border-color 0.15s;
+  -webkit-user-select: none;
+  user-select: none;
+}
+.select-trigger:hover,
+.select-trigger.open { border-color: rgba(255,255,255,0.45); }
+
+.select-trigger-label {
+  flex: 1;
+  font-size: var(--font-body-md-size);
+  font-weight: 400;
+  font-family: inherit;
+  color: var(--color-text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  line-height: var(--font-body-md-lh);
+}
+.select-trigger-icon { color: var(--color-text-secondary); flex-shrink: 0; display: flex; align-items: center; }
+
+/* ── Dropdown panel ── */
+.select-dropdown {
+  position: fixed;
+  z-index: 999;
+  background: #1e1e1e;
+  border: 2px solid var(--color-border);
+  border-radius: 8px;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.35);
+  overflow: hidden;
+}
+.dropdown-current {
+  display: flex;
+  align-items: center;
+  padding: 10px 8px 10px 12px;
+  gap: 4px;
+  background: var(--color-bg-brand);
+  cursor: default;
+}
+.dropdown-current-label {
+  flex: 1;
+  font-size: var(--font-body-md-size);
+  font-weight: 400;
+  font-family: inherit;
+  color: var(--color-text-onbrand);
+  line-height: var(--font-body-md-lh);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.dropdown-divider { height: 1px; background: var(--color-border); }
+.dropdown-options { max-height: 280px; overflow-y: auto; scrollbar-width: none; -ms-overflow-style: none; }
+.dropdown-options::-webkit-scrollbar { display: none; }
+/* ↑ ::-webkit-scrollbar covers Safari/Chrome; scrollbar-width covers Firefox */
+
+.dropdown-option {
+  display: flex;
+  align-items: center;
+  padding: 10px 12px;
+  gap: 8px;
+  cursor: pointer;
+  font-size: var(--font-body-md-size);
+  font-weight: 400;
+  font-family: inherit;
+  color: var(--color-text);
+  line-height: var(--font-body-md-lh);
+  transition: background 0.08s;
+}
+.dd-opt-icon { display: flex; align-items: center; justify-content: center; flex-shrink: 0; width: 14px; height: 14px; overflow: hidden; }
+.dd-opt-label { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dropdown-option:hover { background: #282828; }
+.dropdown-option.selected { background: var(--color-bg-brand); color: var(--color-text-onbrand); }
+
+/* ── Condition value inputs ── */
+.cond-value {
+  flex: 0 0 60px;
+  height: 36px;
+  background: var(--color-bg);
+  border: 2px solid var(--color-border);
+  border-radius: 5px;
+  color: var(--color-text);
+  font-size: var(--font-body-md-size);
+  font-weight: 400;
+  font-family: inherit;
+  padding: 0 8px;
+  outline: none;
+  transition: border-color 0.15s;
+}
+.cond-value:focus { border-color: rgba(255,255,255,0.45); }
+.cond-value.cond-text { flex: 1 0 80px; max-width: 140px; }
+.cond-value[type="color"] { padding: 2px; flex: 0 0 28px; width: 28px; height: 28px; cursor: pointer; border-radius: 4px; }
+.cond-value[type="number"] { -webkit-appearance: none; -moz-appearance: textfield; appearance: textfield; }
+.cond-value[type="number"]::-webkit-outer-spin-button,
+.cond-value[type="number"]::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+
+.cond-range-wrap { display: flex; align-items: center; gap: 4px; flex: 1 0 100px; }
+.cond-range-input {
+  flex: 1 1 0;
+  min-width: 34px;
+  height: 36px;
+  padding: 0 6px;
+  background: var(--color-bg);
+  border: 2px solid var(--color-border);
+  border-radius: 5px;
+  color: var(--color-text);
+  font-size: var(--font-body-md-size);
+  font-weight: 400;
+  font-family: inherit;
+  outline: none;
+  -webkit-appearance: none;
+  -moz-appearance: textfield;
+  appearance: textfield;
+  transition: border-color 0.15s;
+}
+.cond-range-input:focus { border-color: rgba(255,255,255,0.45); }
+.cond-range-input::-webkit-outer-spin-button,
+.cond-range-input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+.cond-range-sep { color: var(--color-text-secondary); font-size: var(--font-body-md-size); flex-shrink: 0; }
+
+.cond-remove {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 4px;
+  border: none;
+  background: transparent;
+  color: var(--color-text-secondary);
+  cursor: pointer;
+  flex-shrink: 0;
+  padding: 0;
+  transition: background 0.1s, color 0.1s;
+}
+.cond-remove:hover { background: rgba(255,80,80,0.1); color: #ff6b6b; }
+
+/* ── Logic row ── */
+.logic-row { display: none; align-items: center; gap: 6px; margin-top: 20px; font-size: var(--font-body-md-size); color: var(--color-text); }
+.logic-row.visible { display: flex; }
+.logic-pills { display: flex; gap: 4px; }
+.logic-pill {
+  padding: 6px 12px;
+  border-radius: 5px;
+  border: 2px solid var(--color-border);
+  background: var(--color-bg);
+  color: var(--color-text-secondary);
+  font-size: var(--font-body-md-size);
+  font-weight: 400;
+  font-family: inherit;
+  cursor: pointer;
+  transition: all 0.1s;
+}
+.logic-pill.active { background: var(--color-bg-brand); border-color: transparent; color: var(--color-text-onbrand); }
+
+/* ── Footer ── */
+.footer { background: #1e1e1e; border-top: 2px solid var(--color-border); flex-shrink: 0; }
+.progress-bar { height: 2px; background: #2a2a2a; display: none; }
+.progress-bar.visible { display: block; }
+.progress-fill { height: 100%; background: var(--color-bg-brand); transition: width 0.1s; width: 0%; }
+
+.footer-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 20px 24px;
+}
+.status-readiness { display: flex; align-items: center; gap: 12px; }
+.status-item { display: flex; align-items: center; gap: 6px; color: var(--color-text); }
+.status-sep { width: 1px; height: 14px; background: rgba(255,255,255,0.15); flex-shrink: 0; }
+
+.count-label { font-size: var(--font-body-md-size); font-weight: 400; color: var(--color-text); }
+.count-label.searching { font-style: italic; color: var(--color-text-secondary); }
+.count-label.error-text { color: #ff6b6b; }
+
+.clear-btn {
+  background: transparent;
+  border: none;
+  color: var(--color-text);
+  font-size: var(--font-body-md-size);
+  font-weight: 400;
+  font-family: inherit;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0;
+  transition: color 0.1s;
+}
+.clear-btn:hover { color: var(--color-text); }
+
+.select-btn {
+  background: var(--color-bg-brand);
+  border: none;
+  border-radius: 5px;
+  color: #fff;
+  font-size: var(--font-body-md-size);
+  font-weight: 400;
+  font-family: inherit;
+  padding: 10px 20px;
+  cursor: pointer;
+  line-height: var(--font-body-md-lh);
+  transition: background 0.1s, opacity 0.1s;
+}
+.select-btn:hover { background: var(--color-bg-hover); }
+.select-btn:active { background: #005cb5; }
+.select-btn:disabled { opacity: 0.45; cursor: not-allowed; }
+
+/* ── Log panel ── */
+.log-section { border-top: 1px solid var(--color-border); padding: 12px 24px; display: flex; flex-direction: column; gap: 8px; flex-shrink: 0; }
+.log-header { display: flex; align-items: center; justify-content: space-between; }
+.copy-btn {
+  display: flex; align-items: center; gap: 5px;
+  background: transparent; border: 1px solid var(--color-border); border-radius: 5px;
+  color: var(--color-text-secondary); font-size: var(--font-body-sm-size); font-family: inherit;
+  padding: 4px 8px; cursor: pointer; transition: background 0.1s, color 0.1s;
+}
+.copy-btn:hover { background: var(--color-bg-secondary); color: var(--color-text); }
+.copy-btn.copied { color: var(--color-bg-brand); border-color: var(--color-bg-brand); }
+.log-list {
+  max-height: 110px; overflow-y: auto;
+  background: var(--color-bg-secondary); border: 1px solid var(--color-border); border-radius: 6px;
+  padding: 8px 10px;
+  font-family: 'JetBrains Mono', Consolas, monospace;
+  font-size: 11px; line-height: 16px;
+}
+.log-empty { color: var(--color-text-secondary); }
+.log-entry { color: var(--color-text-secondary); white-space: pre-wrap; word-break: break-word; }
+.log-entry.error { color: var(--color-danger); }
+.log-entry .log-time { color: var(--color-text-tertiary); margin-right: 6px; }
+
+/* ── Brand footer ── */
+.brand-footer { display: flex; align-items: center; gap: 8px; padding: 0 24px 16px; }
+.brand-name { font-size: var(--font-body-sm-size); font-weight: 400; color: var(--color-text); }
+.brand-dot { width: 3px; height: 3px; border-radius: 50%; background: rgba(255,255,255,0.3); flex-shrink: 0; }
+.brand-link {
+  font-size: var(--font-body-sm-size);
+  font-weight: 400;
+  font-family: inherit;
+  color: var(--color-text-secondary);
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 0;
+  transition: color 0.15s;
+}
+.brand-link:hover { color: var(--color-text); }
+
+/* ── Toast ── */
+.selector-toast {
+  position: fixed;
+  bottom: 120px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(248,113,113,0.12);
+  border: 2px solid #f87171;
+  color: #f87171;
+  font-size: 11px;
+  padding: 7px 12px;
+  border-radius: 6px;
+  white-space: nowrap;
+  z-index: 200;
+  pointer-events: none;
+  animation: toast-in 0.2s ease;
+}
+@keyframes toast-in {
+  from { opacity: 0; transform: translateX(-50%) translateY(4px); }
+  to   { opacity: 1; transform: translateX(-50%) translateY(0); }
+}
+
+/* ── Icon sizes ── */
+.ic-18 { width: 18px; height: 18px; stroke-width: 1.5; }
+.ic-16 { width: 16px; height: 16px; stroke-width: 1.75; }
+.ic-14 { width: 14px; height: 14px; stroke-width: 1.75; }
+.ic-12 { width: 12px; height: 12px; stroke-width: 1.75; }
+.ic-10 { width: 10px; height: 10px; stroke-width: 2; }
+</style>
+</head>
+<body>
+<div class="plugin-wrap">
+
+  <!-- Header -->
+  <div class="content-header">
+    <span class="header-icon"><i data-lucide="settings" class="ic-18"></i></span>
+    <span class="header-title">Figma Selector</span>
+  </div>
+
+  <!-- Scrollable area -->
+  <div class="scroll-container">
+    <div class="scrollable-body" id="scrollable-body">
+
+      <!-- Scope -->
+      <div class="section">
+        <div class="section-header">
+          <span class="section-icon" id="scope-icon"><i data-lucide="crosshair" class="ic-16"></i></span>
+          <span class="section-label" id="scope-label">Scope</span>
+        </div>
+        <div class="chip-group">
+          <div class="chip active" data-scope="page">Page</div>
+          <div class="chip disabled" data-scope="inside">Inside Selection</div>
+          <div class="chip disabled" data-scope="children">Direct Children</div>
+          <div class="chip disabled" data-scope="siblings">Siblings</div>
+        </div>
+      </div>
+
+      <div class="divider"></div>
+
+      <!-- Name -->
+      <div class="section">
+        <div class="section-header">
+          <span class="section-icon" id="name-icon"><i data-lucide="type" class="ic-16"></i></span>
+          <span class="section-label" id="name-label">Name</span>
+        </div>
+        <div class="name-row">
+          <div class="name-input-wrap">
+            <span class="name-input-icon"><i data-lucide="search" class="ic-12"></i></span>
+            <input class="name-input" id="name-input" type="text" placeholder="Filter by layer name…" autocomplete="off" spellcheck="false">
+          </div>
+          <button type="button" class="name-toggle" id="exact-toggle" title="Exact match">
+            <i data-lucide="x" class="ic-16"></i>
+          </button>
+          <button type="button" class="name-toggle" id="case-toggle" title="Case sensitive">
+            <i data-lucide="type" class="ic-16"></i>
+          </button>
+        </div>
+      </div>
+
+      <div class="divider"></div>
+
+      <!-- Type -->
+      <div class="section">
+        <div class="section-header">
+          <span class="section-icon" id="type-icon"><i data-lucide="scan" class="ic-16"></i></span>
+          <span class="section-label" id="type-label">Type</span>
+        </div>
+        <div class="chip-group" id="type-chips">
+          <div class="chip active" data-type="ALL">All</div>
+          <div class="chip" data-type="FRAME">Frame</div>
+          <div class="chip" data-type="AUTO_LAYOUT">Auto Layout</div>
+          <div class="chip" data-type="GROUP">Group</div>
+          <div class="chip" data-type="SECTION">Section</div>
+          <div class="chip" data-type="COMPONENT">Component</div>
+          <div class="chip" data-type="COMPONENT_SET">Comp Set</div>
+          <div class="chip" data-type="INSTANCE">Instance</div>
+          <div class="chip" data-type="TEXT">Text</div>
+          <div class="chip" data-type="RECTANGLE">Rectangle</div>
+          <div class="chip" data-type="ELLIPSE">Ellipse</div>
+          <div class="chip" data-type="VECTOR">Vector</div>
+          <button type="button" class="show-more-btn" id="show-more-btn">
+            <i data-lucide="chevron-down" class="ic-10" id="show-more-icon"></i>
+            More
+          </button>
+        </div>
+        <div class="show-more-row" id="show-more-row">
+          <div class="chip" data-type="BOOLEAN_OPERATION">Boolean</div>
+          <div class="chip" data-type="LINE">Line</div>
+          <div class="chip" data-type="POLYGON">Polygon</div>
+          <div class="chip" data-type="STAR">Star</div>
+          <div class="chip" data-type="SLICE">Slice</div>
+          <div class="chip" data-type="STICKY">Sticky</div>
+          <div class="chip" data-type="CONNECTOR">Connector</div>
+          <div class="chip" data-type="WIDGET">Widget</div>
+          <div class="chip" data-type="STAMP">Stamp</div>
+          <div class="chip" data-type="WASHI_TAPE">Washi Tape</div>
+        </div>
+      </div>
+
+      <div class="divider"></div>
+
+      <!-- Context -->
+      <div class="section">
+        <div class="section-header">
+          <span class="section-icon" id="context-icon"><i data-lucide="component" class="ic-16"></i></span>
+          <span class="section-label" id="context-label">Context</span>
+        </div>
+        <div class="chip-group" id="context-chips">
+          <div class="chip active" data-context="all">All</div>
+          <div class="chip" data-context="instances-only">In Instances</div>
+          <div class="chip" data-context="not-instances">Not Instances</div>
+          <div class="chip" data-context="masters-only">In Masters</div>
+          <div class="chip" data-context="standalone-only">Standalone</div>
+        </div>
+      </div>
+
+      <div class="divider"></div>
+
+      <!-- Instance -->
+      <div class="section">
+        <div class="section-header">
+          <span class="section-icon" id="instance-icon"><i data-lucide="link" class="ic-16"></i></span>
+          <span class="section-label" id="instance-label">Instance</span>
+        </div>
+        <div class="chip-group" id="instance-chips">
+          <div class="chip" data-status="broken-link">Missing Component</div>
+          <div class="chip" data-status="missing-variant">Missing Variant</div>
+          <div class="chip" data-status="has-overrides">Has Overrides</div>
+        </div>
+      </div>
+
+      <div class="divider"></div>
+
+      <!-- Status -->
+      <div class="section">
+        <div class="section-header">
+          <span class="section-icon" id="status-icon"><i data-lucide="tag" class="ic-16"></i></span>
+          <span class="section-label" id="status-label">Status</span>
+        </div>
+        <div class="chip-group" id="status-chips">
+          <div class="chip" data-status="has-fill">Has Fill</div>
+          <div class="chip" data-status="no-fill">No Fill</div>
+          <div class="chip" data-status="has-stroke">Has Stroke</div>
+          <div class="chip" data-status="no-stroke">No Stroke</div>
+          <div class="chip" data-status="hidden">Hidden</div>
+          <div class="chip" data-status="locked">Locked</div>
+          <div class="chip" data-status="masked">Masked</div>
+          <div class="chip" data-status="no-children">No Children</div>
+          <div class="chip" data-status="has-children">Has Children</div>
+          <div class="chip" data-status="has-export">Has Export</div>
+          <div class="chip" data-status="no-text-style">No Text Style</div>
+          <div class="chip" data-status="has-text-style">Has Text Style</div>
+        </div>
+      </div>
+
+      <div class="divider"></div>
+
+      <!-- Conditions -->
+      <div class="section" id="conditions-section">
+        <div class="section-header">
+          <span class="section-icon" id="conditions-icon"><i data-lucide="filter" class="ic-16"></i></span>
+          <span class="section-label" id="conditions-label">CONDITIONS</span>
+          <button type="button" class="add-condition-btn" id="add-condition-btn">
+            <i data-lucide="plus" class="ic-10"></i>
+            Add
+          </button>
+        </div>
+        <div id="condition-rows"></div>
+        <div class="logic-row" id="logic-row">
+          Match
+          <div class="logic-pills">
+            <div class="logic-pill active" data-logic="AND">All</div>
+            <div class="logic-pill" data-logic="OR">Any</div>
+          </div>
+          of the above conditions
+        </div>
+      </div>
+
+    </div><!-- /scrollable-body -->
+
+    <!-- Custom scrollbar -->
+    <div class="scrollbar-track" id="scrollbar-track">
+      <div class="scrollbar-thumb" id="scrollbar-thumb"></div>
+    </div>
+  </div><!-- /scroll-container -->
+
+  <!-- Log -->
+  <div class="log-section">
+    <div class="log-header">
+      <span class="section-label">Log</span>
+      <button type="button" class="copy-btn" id="copy-log-btn">
+        <svg width="12" height="12" viewBox="0 0 12 12" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <rect x="4" y="4" width="7" height="7" rx="1" stroke="currentColor" stroke-width="1.1"/>
+          <path d="M2.5 8V2.5C2.5 1.94772 2.94772 1.5 3.5 1.5H8" stroke="currentColor" stroke-width="1.1"/>
+        </svg>
+        <span id="copy-log-label">Copy</span>
+      </button>
+    </div>
+    <div class="log-list" id="log-list">
+      <div class="log-empty">No actions yet.</div>
+    </div>
+  </div>
+
+  <!-- Footer -->
+  <div class="footer">
+    <div class="progress-bar" id="progress-bar">
+      <div class="progress-fill" id="progress-fill"></div>
+    </div>
+    <div class="footer-actions">
+      <div class="status-readiness">
+        <div class="status-item">
+          <i data-lucide="sparkles" class="ic-16"></i>
+          <span class="count-label" id="count-label">Ready</span>
+        </div>
+        <div class="status-sep"></div>
+        <button type="button" class="clear-btn" id="clear-btn">
+          <i data-lucide="trash-2" class="ic-16"></i>
+          Clear all
+        </button>
+      </div>
+      <button type="button" class="select-btn" id="select-btn">Select Nodes</button>
+    </div>
+    <div class="brand-footer">
+      <span class="brand-name">Figma Selector</span>
+      <span class="brand-dot"></span>
+      <span class="brand-link">v1.0</span>
+      <span class="brand-dot"></span>
+      <button type="button" class="brand-link" id="footer-x">x.com/danielfransix</button>
+      <span class="brand-dot"></span>
+      <button type="button" class="brand-link" id="footer-coffee">☕ Buy me a coffee</button>
+    </div>
+  </div>
+
+</div>
+
+<script>
+// ─── Dropdown manager ─────────────────────────────────────────────────────────
+var _openDropdown = null;
+
+function closeAllDropdowns() {
+  if (_openDropdown) { _openDropdown.remove(); _openDropdown = null; }
+  document.querySelectorAll('.select-trigger.open').forEach(function(t) { t.classList.remove('open'); });
+}
+
+document.addEventListener('click', function(e) {
+  if (!e.target.closest('.select-trigger') && !e.target.closest('.select-dropdown')) {
+    closeAllDropdowns();
+  }
+});
+
+function openDropdown(trigger, options, currentValue, onSelect) {
+  closeAllDropdowns();
+  trigger.classList.add('open');
+
+  var rect = trigger.getBoundingClientRect();
+  var panel = document.createElement('div');
+  panel.className = 'select-dropdown';
+
+  var currentOpt = options.find(function(o) { return o.value === currentValue; });
+  var currentRow = document.createElement('div');
+  currentRow.className = 'dropdown-current';
+  if (currentOpt && currentOpt.icon) {
+    var curIconEl = document.createElement('span');
+    curIconEl.className = 'dd-opt-icon';
+    curIconEl.innerHTML = currentOpt.icon;
+    currentRow.appendChild(curIconEl);
+  }
+  var currentLbl = document.createElement('span');
+  currentLbl.className = 'dropdown-current-label';
+  currentLbl.textContent = currentOpt ? currentOpt.label : '';
+  var currentArrow = document.createElement('span');
+  currentArrow.style.cssText = 'display:flex;align-items:center;color:rgba(255,255,255,0.6);flex-shrink:0';
+  currentArrow.innerHTML = '<i data-lucide="chevron-up" class="ic-10"></i>';
+  currentRow.appendChild(currentLbl);
+  currentRow.appendChild(currentArrow);
+  panel.appendChild(currentRow);
+
+  var divEl = document.createElement('div');
+  divEl.className = 'dropdown-divider';
+  panel.appendChild(divEl);
+
+  var optsList = document.createElement('div');
+  optsList.className = 'dropdown-options';
+  options.forEach(function(opt) {
+    var el = document.createElement('div');
+    el.className = 'dropdown-option' + (opt.value === currentValue ? ' selected' : '');
+    if (opt.icon) {
+      var optIcon = document.createElement('span');
+      optIcon.className = 'dd-opt-icon';
+      optIcon.innerHTML = opt.icon;
+      el.appendChild(optIcon);
+    }
+    var optLbl = document.createElement('span');
+    optLbl.className = 'dd-opt-label';
+    optLbl.textContent = opt.label;
+    el.appendChild(optLbl);
+    el.addEventListener('click', function(e) {
+      e.stopPropagation();
+      closeAllDropdowns();
+      onSelect(opt.value);
+    });
+    optsList.appendChild(el);
+  });
+  panel.appendChild(optsList);
+
+  // Position below trigger; flip up if no space
+  var spaceBelow = window.innerHeight - rect.bottom;
+  var estimatedH = Math.min(options.length * 42 + 43 + 1, 323);
+  if (spaceBelow < estimatedH && rect.top > estimatedH) {
+    panel.style.top = (rect.top - estimatedH - 2) + 'px';
+  } else {
+    panel.style.top = (rect.bottom + 2) + 'px';
+  }
+  panel.style.left = rect.left + 'px';
+  panel.style.width = rect.width + 'px';
+
+  document.body.appendChild(panel);
+  lucide.createIcons();
+  _openDropdown = panel;
+
+  document.getElementById('scrollable-body').addEventListener('scroll', closeAllDropdowns, { once: true });
+}
+
+// ─── State ───────────────────────────────────────────────────────────────────
+var state = {
+  scope: 'page',
+  hasSelection: false,
+  nameValue: '',
+  exactMatch: false,
+  caseSensitive: false,
+  types: [],
+  contextFilter: 'all',
+  statusChips: [],
+  conditions: [],
+  conditionLogic: 'AND',
+  showMoreTypes: false,
+};
+
+var _conditionIdCounter = 0;
+var INSTANCE_CHIP_KEYS = ['broken-link', 'missing-variant', 'has-overrides'];
+
+// ─── Dropdown icons (inlined from Figma) ─────────────────────────────────────
+var _IC = {
+  fill:        '<svg width="14" height="14" viewBox="0 0 14 14" fill="none" xmlns="http://www.w3.org/2000/svg"><g clip-path="url(#ic_fill)"><path fill-rule="evenodd" clip-rule="evenodd" d="M8 2C11.3137 2 14 4.68629 14 8C14 9.26523 12.8949 9.99988 11.8936 10H10.5C10.2239 10 10 10.2239 10 10.5V11.8936C9.99988 12.8949 9.26523 14 8 14C4.68629 14 2 11.3137 2 8C2 4.68629 4.68629 2 8 2ZM8 3C5.23858 3 3 5.23858 3 8C3 10.7614 5.23858 13 8 13C8.58564 13 8.99989 12.4792 9 11.8936V10.5C9 9.67157 9.67157 9 10.5 9H11.8936C12.4792 8.99988 13 8.58564 13 8C13 5.23858 10.7614 3 8 3ZM9 5C9 5.55228 8.55228 6 8 6C7.44772 6 7 5.55228 7 5C7 4.44772 7.44772 4 8 4C8.55228 4 9 4.44772 9 5ZM9.73205 7C10.0082 7.47829 10.6198 7.64217 11.0981 7.36603C11.5764 7.08988 11.7402 6.47829 11.4641 6C11.188 5.52171 10.5764 5.35783 10.0981 5.63397C9.61978 5.91012 9.45591 6.52171 9.73205 7ZM6.00017 10.3662C5.52187 10.6423 4.91028 10.4785 4.63414 10.0002C4.358 9.52187 4.52187 8.91028 5.00017 8.63414C5.47846 8.358 6.09005 8.52187 6.36619 9.00017C6.64233 9.47846 6.47846 10.09 6.00017 10.3662ZM5.50006 7.49994C6.05234 7.49994 6.50006 7.05223 6.50006 6.49994C6.50006 5.94766 6.05234 5.49994 5.50006 5.49994C4.94777 5.49994 4.50006 5.94766 4.50006 6.49994C4.50006 7.05223 4.94777 7.49994 5.50006 7.49994Z" fill="white"/></g><defs><clipPath id="ic_fill"><rect width="14" height="14" fill="white"/></clipPath></defs></svg>',
+  stroke:      '<svg width="14" height="14" viewBox="0 0 14 14" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M8.75003 2.5C9.11016 2.5 9.44259 2.69356 9.62015 3.00684C9.79765 3.32034 9.79281 3.70572 9.60745 4.01465L8.76566 5.41699H9.33304C9.7375 5.41699 10.1021 5.66051 10.2569 6.03418C10.4116 6.40785 10.3261 6.83803 10.0401 7.12402L5.95706 11.207C5.62134 11.5428 5.09562 11.5963 4.69925 11.335C4.30309 11.0736 4.14523 10.5696 4.32132 10.1289L4.93949 8.58301H4.37503C4.02855 8.58301 3.70668 8.40404 3.52445 8.10938C3.34224 7.81456 3.32551 7.44573 3.4805 7.13574L5.52249 3.05273L5.59378 2.93164C5.77872 2.66376 6.08563 2.5 6.41702 2.5H8.75003ZM4.37503 7.58301H6.41702L5.25003 10.5L9.33304 6.41699H7.00003L8.75003 3.5H6.41702L4.37503 7.58301Z" fill="white"/></svg>',
+  width:       '<svg width="14" height="14" viewBox="0 0 14 14" fill="none" xmlns="http://www.w3.org/2000/svg"><g clip-path="url(#ic_width)"><path d="M4.13232 11L1.9292 3H3.05811L4.67139 9.35547H4.74561L6.40967 3H7.58545L9.24561 9.35937H9.32373L10.937 3H12.0659L9.86279 11H8.75342L7.02686 4.81641H6.96436L5.2417 11H4.13232Z" fill="white" fill-opacity="0.7"/></g><defs><clipPath id="ic_width"><rect width="14" height="14" fill="white"/></clipPath></defs></svg>',
+  height:      '<svg width="14" height="14" viewBox="0 0 14 14" fill="none" xmlns="http://www.w3.org/2000/svg"><g clip-path="url(#ic_height)"><path d="M3.84521 11V3H4.93506V6.51953H9.06396V3H10.1499V11H9.06396V7.46875H4.93506V11H3.84521Z" fill="white" fill-opacity="0.7"/></g><defs><clipPath id="ic_height"><rect width="14" height="14" fill="white"/></clipPath></defs></svg>',
+  opacity:     '<svg width="14" height="14" viewBox="0 0 14 14" fill="none" xmlns="http://www.w3.org/2000/svg"><path fill-rule="evenodd" clip-rule="evenodd" d="M5.5 10.5H8.5L8.7041 10.4893C9.71278 10.387 10.5 9.53565 10.5 8.5V5.5C10.5 4.39543 9.60457 3.5 8.5 3.5H5.5C4.39543 3.5 3.5 4.39543 3.5 5.5V8.5L3.51074 8.7041C3.6062 9.64565 4.35435 10.3938 5.2959 10.4893L5.5 10.5ZM8.5 9.5H5.5C4.94772 9.5 4.5 9.05228 4.5 8.5V5.5C4.5 4.94772 4.94772 4.5 5.5 4.5H8.5C9.05228 4.5 9.5 4.94772 9.5 5.5V8.5C9.5 9.05228 9.05228 9.5 8.5 9.5ZM8.75 5.54167C8.91108 5.54167 9.04167 5.41108 9.04167 5.25C9.04167 5.08892 8.91108 4.95833 8.75 4.95833C8.58892 4.95833 8.45833 5.08892 8.45833 5.25C8.45833 5.41108 8.58892 5.54167 8.75 5.54167ZM7.875 6.41667C7.875 6.57775 7.74442 6.70833 7.58333 6.70833C7.42225 6.70833 7.29167 6.57775 7.29167 6.41667C7.29167 6.25558 7.42225 6.125 7.58333 6.125C7.74442 6.125 7.875 6.25558 7.875 6.41667ZM6.70833 7.58333C6.70833 7.74442 6.57775 7.875 6.41667 7.875C6.25558 7.875 6.125 7.74442 6.125 7.58333C6.125 7.42225 6.25558 7.29167 6.41667 7.29167C6.57775 7.29167 6.70833 7.42225 6.70833 7.58333ZM5.54167 8.75C5.54167 8.91108 5.41108 9.04167 5.25 9.04167C5.08892 9.04167 4.95833 8.91108 4.95833 8.75C4.95833 8.58892 5.08892 8.45833 5.25 8.45833C5.41108 8.45833 5.54167 8.58892 5.54167 8.75ZM6.41667 9.04167C6.57775 9.04167 6.70833 8.91108 6.70833 8.75C6.70833 8.58892 6.57775 8.45833 6.41667 8.45833C6.25558 8.45833 6.125 8.58892 6.125 8.75C6.125 8.91108 6.25558 9.04167 6.41667 9.04167ZM7.58333 7.875C7.74442 7.875 7.875 7.74442 7.875 7.58333C7.875 7.42225 7.74442 7.29167 7.58333 7.29167C7.42225 7.29167 7.29167 7.42225 7.29167 7.58333C7.29167 7.74442 7.42225 7.875 7.58333 7.875ZM7.875 8.75C7.875 8.91108 7.74442 9.04167 7.58333 9.04167C7.42225 9.04167 7.29167 8.91108 7.29167 8.75C7.29167 8.58892 7.42225 8.45833 7.58333 8.45833C7.74442 8.45833 7.875 8.58892 7.875 8.75ZM9.04167 6.41667C9.04167 6.57775 8.91108 6.70833 8.75 6.70833C8.58892 6.70833 8.45833 6.57775 8.45833 6.41667C8.45833 6.25558 8.58892 6.125 8.75 6.125C8.91108 6.125 9.04167 6.25558 9.04167 6.41667ZM8.75 7.875C8.91108 7.875 9.04167 7.74442 9.04167 7.58333C9.04167 7.42225 8.91108 7.29167 8.75 7.29167C8.58892 7.29167 8.45833 7.42225 8.45833 7.58333C8.45833 7.74442 8.58892 7.875 8.75 7.875ZM9.04167 8.75C9.04167 8.91108 8.91108 9.04167 8.75 9.04167C8.58892 9.04167 8.45833 8.91108 8.45833 8.75C8.45833 8.58892 8.58892 8.45833 8.75 8.45833C8.91108 8.45833 9.04167 8.58892 9.04167 8.75Z" fill="white"/></svg>',
+  effects:     '<svg width="14" height="14" viewBox="0 0 14 14" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M8.75003 2.5C9.11016 2.5 9.44259 2.69356 9.62015 3.00684C9.79765 3.32034 9.79281 3.70572 9.60745 4.01465L8.76566 5.41699H9.33304C9.7375 5.41699 10.1021 5.66051 10.2569 6.03418C10.4116 6.40785 10.3261 6.83803 10.0401 7.12402L5.95706 11.207C5.62134 11.5428 5.09562 11.5963 4.69925 11.335C4.30309 11.0736 4.14523 10.5696 4.32132 10.1289L4.93949 8.58301H4.37503C4.02855 8.58301 3.70668 8.40404 3.52445 8.10938C3.34224 7.81456 3.32551 7.44573 3.4805 7.13574L5.52249 3.05273L5.59378 2.93164C5.77872 2.66376 6.08563 2.5 6.41702 2.5H8.75003ZM4.37503 7.58301H6.41702L5.25003 10.5L9.33304 6.41699H7.00003L8.75003 3.5H6.41702L4.37503 7.58301Z" fill="white"/></svg>',
+  autolayout:  '<svg width="14" height="14" viewBox="0 0 14 14" fill="none" xmlns="http://www.w3.org/2000/svg"><path fill-rule="evenodd" clip-rule="evenodd" d="M8.8337 6.70834V5.95834C8.8337 5.68231 8.6097 5.45852 8.3337 5.45834H5.66671C5.39057 5.45834 5.16671 5.6822 5.16671 5.95834V6.70834C5.16671 6.98449 4.94285 7.20834 4.66671 7.20834C4.39057 7.20834 4.16671 6.98449 4.16671 6.70834V5.95834C4.16671 5.12992 4.83828 4.45834 5.66671 4.45834H6.49972V3.20834C6.49972 2.93231 6.72373 2.70852 6.99972 2.70834C7.27586 2.70834 7.49972 2.9322 7.49972 3.20834V4.45834H8.3337C9.16198 4.45852 9.8337 5.13002 9.8337 5.95834V6.70834C9.8337 6.98438 9.6097 7.20817 9.3337 7.20834C9.05756 7.20834 8.8337 6.98449 8.8337 6.70834ZM5.18819 8.10483C5.38346 7.90957 5.69996 7.90957 5.89523 8.10483C6.09049 8.30009 6.09049 8.6166 5.89523 8.81186L5.37374 9.33334L5.89523 9.85483C6.09049 10.0501 6.09049 10.3666 5.89523 10.5619C5.69996 10.7571 5.38346 10.7571 5.18819 10.5619L4.66671 10.0404L4.14523 10.5619C3.94996 10.7571 3.63346 10.7571 3.43819 10.5619C3.24293 10.3666 3.24293 10.0501 3.43819 9.85483L3.95968 9.33334L3.43819 8.81186C3.24293 8.6166 3.24293 8.30009 3.43819 8.10483C3.63346 7.90957 3.94996 7.90957 4.14523 8.10483L4.66671 8.62631L5.18819 8.10483ZM9.3337 9.16668C9.4256 9.16685 9.49972 9.24173 9.49972 9.33367C9.49954 9.42546 9.42549 9.49951 9.3337 9.49968C9.24176 9.49968 9.16689 9.42557 9.16671 9.33367C9.16671 9.24162 9.24166 9.16668 9.3337 9.16668ZM9.21456 10.4938L9.3337 10.4997C9.93755 10.4995 10.434 10.0409 10.4939 9.45281L10.4997 9.33367C10.4997 8.72966 10.0411 8.23236 9.45284 8.17254L9.3337 8.16668C8.68937 8.16668 8.16671 8.68934 8.16671 9.33367L8.17257 9.45281C8.22842 10.002 8.66533 10.4383 9.21456 10.4938Z" fill="white"/></svg>',
+  children:    '<svg width="14" height="14" viewBox="0 0 14 14" fill="none" xmlns="http://www.w3.org/2000/svg"><path fill-rule="evenodd" clip-rule="evenodd" d="M11.5 12C11.7761 12 12 11.7761 12 11.5V4.5C12 4.22386 11.7761 4 11.5 4H4.5C4.22386 4 4 4.22386 4 4.5V11.5C4 11.7761 4.22386 12 4.5 12H11.5ZM11.5 3C12.3284 3 13 3.67157 13 4.5V11.5C13 12.3284 12.3284 13 11.5 13H4.5C3.67157 13 3 12.3284 3 11.5V4.5C3 3.67157 3.67157 3 4.5 3H11.5ZM7.49707 10.4502C7.52454 10.7249 7.32453 10.9695 7.0498 10.9971C6.77506 11.0245 6.53045 10.8245 6.50293 10.5498L6.44824 10H5.5C5.22386 10 5 9.77614 5 9.5C5 9.22386 5.22386 9 5.5 9H6.34766L6.14746 7H5.5C5.22386 7 5 6.77614 5 6.5C5 6.22386 5.22386 6 5.5 6H6.04785L6.00293 5.5498C5.97546 5.27507 6.17547 5.03045 6.4502 5.00293C6.72494 4.97546 6.96955 5.17547 6.99707 5.4502L7.05176 6H8.54785L8.50293 5.5498C8.47546 5.27507 8.67547 5.03045 8.9502 5.00293C9.22494 4.97546 9.46955 5.17547 9.49707 5.4502L9.55176 6H10.5C10.7761 6 11 6.22386 11 6.5C11 6.77614 10.7761 7 10.5 7H9.65234L9.85254 9H10.5C10.7761 9 11 9.22386 11 9.5C11 9.77614 10.7761 10 10.5 10H9.95215L9.99707 10.4502C10.0245 10.7249 9.82453 10.9695 9.5498 10.9971C9.27506 11.0245 9.03045 10.8245 9.00293 10.5498L8.94824 10H7.45215L7.49707 10.4502ZM8.64746 7H7.15234L7.35254 9H8.84766L8.64746 7Z" fill="white"/></svg>',
+  clips:       '<svg width="14" height="14" viewBox="0 0 14 14" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M8.37508 9.625C8.37508 9.34886 8.15122 9.125 7.87508 9.125C7.59894 9.125 7.37508 9.34886 7.37508 9.625H7.87508H8.37508ZM7.29175 9.70833C7.01561 9.70833 6.79175 9.93219 6.79175 10.2083C6.79175 10.4845 7.01561 10.7083 7.29175 10.7083V10.2083V9.70833ZM4.37508 6.625C4.65122 6.625 4.87508 6.40114 4.87508 6.125C4.87508 5.84886 4.65122 5.625 4.37508 5.625V6.125V6.625ZM3.29175 6.70833C3.29175 6.98448 3.51561 7.20833 3.79175 7.20833C4.06789 7.20833 4.29175 6.98448 4.29175 6.70833H3.79175H3.29175ZM4.29175 9.625C4.29175 9.34886 4.06789 9.125 3.79175 9.125C3.51561 9.125 3.29175 9.34886 3.29175 9.625H3.79175H4.29175ZM4.37508 10.7083C4.65122 10.7083 4.87508 10.4845 4.87508 10.2083C4.87508 9.93219 4.65122 9.70833 4.37508 9.70833V10.2083V10.7083ZM3.29175 8.45833C3.29175 8.73448 3.51561 8.95833 3.79175 8.95833C4.06789 8.95833 4.29175 8.73448 4.29175 8.45833H3.79175H3.29175ZM4.29175 7.875C4.29175 7.59886 4.06789 7.375 3.79175 7.375C3.51561 7.375 3.29175 7.59886 3.29175 7.875H3.79175H4.29175ZM5.54175 9.70833C5.26561 9.70833 5.04175 9.93219 5.04175 10.2083C5.04175 10.4845 5.26561 10.7083 5.54175 10.7083V10.2083V9.70833ZM6.12508 10.7083C6.40122 10.7083 6.62508 10.4845 6.62508 10.2083C6.62508 9.93219 6.40122 9.70833 6.12508 9.70833V10.2083V10.7083ZM5.54175 5.625C5.26561 5.625 5.04175 5.84886 5.04175 6.125C5.04175 6.40114 5.26561 6.625 5.54175 6.625V6.125V5.625ZM7.37508 8.45833C7.37508 8.73448 7.59894 8.95833 7.87508 8.95833C8.15122 8.95833 8.37508 8.73448 8.37508 8.45833H7.87508H7.37508ZM7.87508 9.625H7.37508V9.70833H7.87508H8.37508V9.625H7.87508ZM7.37508 10.2083V9.70833H7.29175V10.2083V10.7083H7.37508V10.2083ZM4.37508 6.125V5.625H4.29175V6.125V6.625H4.37508V6.125ZM3.79175 6.625H3.29175V6.70833H3.79175H4.29175V6.625H3.79175ZM3.79175 9.625H3.29175V9.70833H3.79175H4.29175V9.625H3.79175ZM4.29175 10.2083V10.7083H4.37508V10.2083V9.70833H4.29175V10.2083ZM3.79175 8.45833H4.29175V7.875H3.79175H3.29175V8.45833H3.79175ZM5.54175 10.2083V10.7083H6.12508V10.2083V9.70833H5.54175V10.2083ZM5.54175 6.125V6.625H5.83341V6.125V5.625H5.54175V6.125ZM7.87508 8.16667H7.37508V8.45833H7.87508H8.37508V8.16667H7.87508ZM3.79175 9.70833H3.29175C3.29175 10.2606 3.73946 10.7083 4.29175 10.7083V10.2083V9.70833H4.29175H3.79175ZM4.29175 6.125V5.625C3.73946 5.625 3.29175 6.07272 3.29175 6.625H3.79175H4.29175L4.29175 6.625V6.125ZM7.87508 9.70833H7.37508V9.70833V10.2083V10.7083C7.92737 10.7083 8.37508 10.2606 8.37508 9.70833H7.87508Z" fill="white" fill-opacity="0.4"/><path fill-rule="evenodd" clip-rule="evenodd" d="M9.12508 8.45865V8.37499H6.62508V8.45865C6.62491 8.73464 6.40111 8.95865 6.12508 8.95865C5.84905 8.95865 5.62526 8.73464 5.62508 8.45865V8.37499H5.54175C5.26561 8.37499 5.04175 8.15113 5.04175 7.87499C5.04175 7.59885 5.26561 7.37499 5.54175 7.37499H5.62508V4.87499H5.54175C5.26561 4.87499 5.04175 4.65113 5.04175 4.37499C5.04175 4.09885 5.26561 3.87499 5.54175 3.87499H5.62508V3.79166C5.62508 3.51551 5.84894 3.29166 6.12508 3.29166C6.40122 3.29166 6.62508 3.51551 6.62508 3.79166V3.87499H9.12508V3.79166C9.12508 3.51551 9.34894 3.29166 9.62508 3.29166C9.90122 3.29166 10.1251 3.51551 10.1251 3.79166V3.87499H10.2087C10.4847 3.87517 10.7087 4.09896 10.7087 4.37499C10.7087 4.65102 10.4847 4.87481 10.2087 4.87499H10.1251V7.37499H10.2087C10.4847 7.37517 10.7087 7.59896 10.7087 7.87499C10.7087 8.15102 10.4847 8.37481 10.2087 8.37499H10.1251V8.45865C10.1249 8.73464 9.90111 8.95865 9.62508 8.95865C9.34905 8.95865 9.12526 8.73464 9.12508 8.45865ZM6.62508 4.87499V5.62499H7.37476C7.92704 5.62499 8.37476 6.0727 8.37476 6.62499V7.37499H9.12508V4.87499H6.62508ZM6.62508 6.62499V7.37499H7.37476V6.62499H6.62508Z" fill="white"/></svg>',
+  fontsize:    '<svg width="14" height="14" viewBox="0 0 14 14" fill="none" xmlns="http://www.w3.org/2000/svg"><path fill-rule="evenodd" clip-rule="evenodd" d="M3.35815 9.33332H3.9506L4.41976 8.01171H6.30697L6.77612 9.33332H7.36857L5.65503 4.66666H5.0717L3.35815 9.33332ZM6.12901 7.51041L5.38159 5.40494H5.34513L4.59772 7.51041H6.12901ZM7.95125 9.33337H8.52546L8.77105 8.6011H9.88753L10.1336 9.33337H10.7078L9.66085 6.36368H8.99673L7.95125 9.33337ZM9.74234 8.16899L9.34039 6.9727H9.31719L8.91598 8.16899H9.74234Z" fill="white"/></svg>',
+  text:        '<svg width="14" height="14" viewBox="0 0 14 14" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M12 5V4H8.5V12H9.5C9.77614 12 10 12.2239 10 12.5C10 12.7761 9.77614 13 9.5 13H6.5C6.22386 13 6 12.7761 6 12.5C6 12.2239 6.22386 12 6.5 12H7.5V4H4V5C4 5.27614 3.77614 5.5 3.5 5.5C3.22386 5.5 3 5.27614 3 5V3.5C3 3.22386 3.22386 3 3.5 3H12.5C12.7761 3 13 3.22386 13 3.5V5C13 5.27614 12.7761 5.5 12.5 5.5C12.2239 5.5 12 5.27614 12 5Z" fill="white"/></svg>',
+  variable:    '<svg width="14" height="14" viewBox="0 0 14 15" fill="none" xmlns="http://www.w3.org/2000/svg"><path fill-rule="evenodd" clip-rule="evenodd" d="M12.1104 5.1926C12.3542 5.38034 12.5 5.67288 12.5 5.98557V10.0266C12.5 10.3839 12.3094 10.7142 12 10.8928L8.5 12.9133L8.38086 12.9719C8.09639 13.0891 7.77073 13.0696 7.5 12.9133L4 10.8928C3.6906 10.7142 3.5 10.3839 3.5 10.0266V5.98557C3.5 5.67288 3.64578 5.38034 3.88965 5.1926L4 5.11936L7.5 3.09885C7.8094 2.92022 8.1906 2.92022 8.5 3.09885L12 5.11936L12.1104 5.1926ZM12.5 11.759C13.1188 11.4017 13.5 10.7411 13.5 10.0266V5.98557C13.5 5.27104 13.1188 4.61041 12.5 4.25315L9 2.23264C8.3812 1.87537 7.6188 1.87537 7 2.23264L3.5 4.25315C2.8812 4.61041 2.5 5.27104 2.5 5.98557V10.0266C2.5 10.7411 2.8812 11.4017 3.5 11.759L7 13.7795C7.61879 14.1368 8.38121 14.1368 9 13.7795L12.5 11.759ZM8 7.99979V5.99979H6V7.99979H8Z" fill="white"/></svg>',
+  closex:      '<svg width="14" height="14" viewBox="0 0 14 14" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M11.1464 4.14648C11.3417 3.95121 11.6582 3.95121 11.8535 4.14648C12.0487 4.34174 12.0487 4.65825 11.8535 4.85351L8.70699 7.99999L11.8535 11.1465C12.0487 11.3417 12.0487 11.6582 11.8535 11.8535C11.6582 12.0488 11.3417 12.0488 11.1464 11.8535L7.99996 8.70702L4.85348 11.8535C4.65822 12.0488 4.34171 12.0488 4.14645 11.8535C3.95118 11.6582 3.95118 11.3417 4.14645 11.1465L7.29293 7.99999L4.14645 4.85351C3.95118 4.65825 3.95118 4.34174 4.14645 4.14648C4.34171 3.95121 4.65822 3.95121 4.85348 4.14648L7.99996 7.29296L11.1464 4.14648Z" fill="white"/></svg>',
+};
+
+// ─── Condition schema ─────────────────────────────────────────────────────────
+var PROPERTIES = [
+  { value: 'fill',        label: 'Fill',             icon: _IC.fill },
+  { value: 'stroke',      label: 'Stroke',           icon: _IC.stroke },
+  { value: 'width',       label: 'Width',            icon: _IC.width },
+  { value: 'height',      label: 'Height',           icon: _IC.height },
+  { value: 'opacity',     label: 'Opacity',          icon: _IC.opacity },
+  { value: 'effects',     label: 'Effects',          icon: _IC.effects },
+  { value: 'auto-layout', label: 'Auto Layout',      icon: _IC.autolayout },
+  { value: 'padding-left',   label: 'Padding Left',        icon: _IC.autolayout },
+  { value: 'padding-right',  label: 'Padding Right',       icon: _IC.autolayout },
+  { value: 'padding-top',    label: 'Padding Top',         icon: _IC.autolayout },
+  { value: 'padding-bottom', label: 'Padding Bottom',      icon: _IC.autolayout },
+  { value: 'padding-all',    label: 'Padding (All Sides)', icon: _IC.autolayout },
+  { value: 'gap',            label: 'Gap (Item Spacing)',  icon: _IC.autolayout },
+  { value: 'children',    label: 'Children (count)', icon: _IC.children },
+  { value: 'clips',       label: 'Clips Content',    icon: _IC.clips },
+  { value: 'font-size',   label: 'Font Size (text)', icon: _IC.fontsize },
+  { value: 'font-family', label: 'Font Family (text)', icon: _IC.text },
+  { value: 'font-style',  label: 'Font Style (text)', icon: _IC.text },
+];
+
+var PADDING_OPS = [
+  { value: 'pad-equals',  label: 'padding =' },
+  { value: 'pad-gt',      label: 'padding >' },
+  { value: 'pad-lt',      label: 'padding <' },
+  { value: 'pad-between', label: 'padding between' },
+];
+
+var OPERATORS = {
+  'fill': [
+    { value: 'color-equals',       label: 'color =' },
+    { value: 'color-not-equals',   label: 'color ≠' },
+    { value: 'linked-to-variable', label: 'linked to variable',     icon: _IC.variable },
+    { value: 'not-linked',         label: 'not linked to variable', icon: _IC.closex },
+  ],
+  'stroke': [
+    { value: 'color-equals',       label: 'color =' },
+    { value: 'color-not-equals',   label: 'color ≠' },
+    { value: 'weight-equals',      label: 'weight =' },
+    { value: 'weight-gt',          label: 'weight >' },
+    { value: 'weight-lt',          label: 'weight <' },
+    { value: 'weight-between',     label: 'weight between' },
+    { value: 'linked-to-variable', label: 'linked to variable', icon: _IC.variable },
+  ],
+  'width':  [
+    { value: 'w-equals',  label: 'width =' },
+    { value: 'w-gt',      label: 'width >' },
+    { value: 'w-lt',      label: 'width <' },
+    { value: 'w-between', label: 'width between' },
+  ],
+  'height': [
+    { value: 'h-equals',  label: 'height =' },
+    { value: 'h-gt',      label: 'height >' },
+    { value: 'h-lt',      label: 'height <' },
+    { value: 'h-between', label: 'height between' },
+  ],
+  'opacity': [
+    { value: 'equals',  label: 'opacity =' },
+    { value: 'gt',      label: 'opacity >' },
+    { value: 'lt',      label: 'opacity <' },
+    { value: 'between', label: 'opacity between' },
+  ],
+  'effects': [
+    { value: 'has-effect',       label: 'has any effect' },
+    { value: 'no-effect',        label: 'no effect' },
+    { value: 'has-drop-shadow',  label: 'has drop shadow' },
+    { value: 'has-inner-shadow', label: 'has inner shadow' },
+    { value: 'has-blur',         label: 'has layer blur' },
+    { value: 'has-bg-blur',      label: 'has bg blur' },
+  ],
+  'auto-layout': [
+    { value: 'has-auto-layout', label: 'has auto layout' },
+    { value: 'no-auto-layout',  label: 'no auto layout' },
+    { value: 'is-horizontal',   label: 'direction: H' },
+    { value: 'is-vertical',     label: 'direction: V' },
+    { value: 'is-grid',         label: 'direction: grid' },
+    { value: 'has-wrap',        label: 'wrap: on' },
+    { value: 'no-wrap',         label: 'wrap: off' },
+  ],
+  'padding-left':   PADDING_OPS,
+  'padding-right':  PADDING_OPS,
+  'padding-top':    PADDING_OPS,
+  'padding-bottom': PADDING_OPS,
+  'padding-all':    PADDING_OPS,
+  'gap': [
+    { value: 'gap-equals',  label: 'gap =' },
+    { value: 'gap-gt',      label: 'gap >' },
+    { value: 'gap-lt',      label: 'gap <' },
+    { value: 'gap-between', label: 'gap between' },
+  ],
+  'children': [
+    { value: 'count-equals',  label: 'count =' },
+    { value: 'count-gt',      label: 'count >' },
+    { value: 'count-lt',      label: 'count <' },
+    { value: 'count-between', label: 'count between' },
+  ],
+  'clips': [
+    { value: 'clips-content', label: 'clips content' },
+    { value: 'no-clip',       label: "doesn't clip" },
+  ],
+  'font-size': [
+    { value: 'size-equals',  label: 'size =' },
+    { value: 'size-gt',      label: 'size >' },
+    { value: 'size-lt',      label: 'size <' },
+    { value: 'size-between', label: 'size between' },
+  ],
+  'font-family': [
+    { value: 'family-equals',   label: 'family =' },
+    { value: 'family-contains', label: 'family contains' },
+  ],
+  'font-style': [
+    { value: 'style-equals',   label: 'style =' },
+    { value: 'style-contains', label: 'style contains' },
+  ],
+};
+
+var VALUE_TYPES = {
+  'color-equals': 'color', 'color-not-equals': 'color',
+  'weight-equals': 'number', 'weight-gt': 'number', 'weight-lt': 'number', 'weight-between': 'range',
+  'w-equals': 'number', 'w-gt': 'number', 'w-lt': 'number', 'w-between': 'range',
+  'h-equals': 'number', 'h-gt': 'number', 'h-lt': 'number', 'h-between': 'range',
+  'equals': 'percent', 'gt': 'percent', 'lt': 'percent', 'between': 'range',
+  'count-equals': 'number', 'count-gt': 'number', 'count-lt': 'number', 'count-between': 'range',
+  'size-equals': 'number', 'size-gt': 'number', 'size-lt': 'number', 'size-between': 'range',
+  'family-equals': 'text', 'family-contains': 'text',
+  'style-equals': 'text', 'style-contains': 'text',
+  'pad-equals': 'number', 'pad-gt': 'number', 'pad-lt': 'number', 'pad-between': 'range',
+  'gap-equals': 'number', 'gap-gt': 'number', 'gap-lt': 'number', 'gap-between': 'range',
+};
+
+function getValueType(op) { return VALUE_TYPES[op] || null; }
+function getDefaultOperator(prop) { return OPERATORS[prop] ? OPERATORS[prop][0].value : ''; }
+
+// ─── Build config ─────────────────────────────────────────────────────────────
+function buildConfig() {
+  return {
+    scope: state.scope,
+    nameFilter: { value: state.nameValue, exactMatch: state.exactMatch, caseSensitive: state.caseSensitive },
+    types: state.types.slice(),
+    contextFilter: state.contextFilter,
+    statusChips: state.statusChips.slice(),
+    conditions: state.conditions.map(function(c) {
+      return { property: c.property, operator: c.operator, value: c.value };
+    }),
+    conditionLogic: state.conditionLogic,
+  };
+}
+
+// ─── UI helpers ──────────────────────────────────────────────────────────────
+function setCountLabel(mode, text, total) {
+  var el = document.getElementById('count-label');
+  el.className = 'count-label';
+  if (mode === 'ready')     { el.textContent = 'Ready'; }
+  else if (mode === 'done') { el.textContent = text + ' node' + (text !== 1 ? 's' : '') + ' selected'; }
+  else if (mode === 'capped') { el.textContent = text.toLocaleString() + ' of ' + total.toLocaleString() + ' selected'; }
+  else if (mode === 'error') { el.className = 'count-label error-text'; el.textContent = text; }
+  else if (mode === 'searching') { el.className = 'count-label searching'; el.textContent = text; }
+}
+
+function showErrorToast(text) {
+  var t = document.createElement('div');
+  t.className = 'selector-toast';
+  t.textContent = text;
+  document.body.appendChild(t);
+  setTimeout(function() { if (t.parentNode) t.remove(); }, 3000);
+}
+
+function updateSectionLabels() {
+  var hasInstanceChip = state.statusChips.some(function(c) { return INSTANCE_CHIP_KEYS.indexOf(c) !== -1; });
+  var hasOtherStatus  = state.statusChips.some(function(c) { return INSTANCE_CHIP_KEYS.indexOf(c) === -1; });
+  function set(lid, iid, active) {
+    document.getElementById(lid).className = 'section-label' + (active ? ' active' : '');
+    document.getElementById(iid).className = 'section-icon' + (active ? ' active' : '');
+  }
+  set('name-label',       'name-icon',       !!state.nameValue);
+  set('type-label',       'type-icon',       state.types.length > 0);
+  set('context-label',    'context-icon',    state.contextFilter !== 'all');
+  set('instance-label',   'instance-icon',   hasInstanceChip);
+  set('status-label',     'status-icon',     hasOtherStatus);
+  set('conditions-label', 'conditions-icon', state.conditions.length > 0);
+}
+
+// ─── Scope ────────────────────────────────────────────────────────────────────
+function updateScopePills() {
+  document.querySelectorAll('[data-scope]').forEach(function(chip) {
+    var s = chip.getAttribute('data-scope');
+    chip.classList.toggle('active', s === state.scope);
+    if (s !== 'page' && !state.hasSelection) chip.classList.add('disabled');
+    else chip.classList.remove('disabled');
+  });
+}
+document.querySelectorAll('[data-scope]').forEach(function(chip) {
+  chip.addEventListener('click', function() {
+    var s = chip.getAttribute('data-scope');
+    if (s !== 'page' && !state.hasSelection) return;
+    state.scope = s;
+    updateScopePills();
+  });
+});
+
+// ─── Name ─────────────────────────────────────────────────────────────────────
+document.getElementById('name-input').addEventListener('input', function(e) {
+  state.nameValue = e.target.value; updateSectionLabels();
+});
+document.getElementById('exact-toggle').addEventListener('click', function() {
+  state.exactMatch = !state.exactMatch; this.classList.toggle('active', state.exactMatch);
+});
+document.getElementById('case-toggle').addEventListener('click', function() {
+  state.caseSensitive = !state.caseSensitive; this.classList.toggle('active', state.caseSensitive);
+});
+
+// ─── Type chips ───────────────────────────────────────────────────────────────
+document.getElementById('type-chips').addEventListener('click', function(e) {
+  var chip = e.target.closest('[data-type]');
+  if (!chip || chip.tagName === 'BUTTON') return;
+  var type = chip.getAttribute('data-type');
+  if (type === 'ALL') { state.types = []; }
+  else {
+    var idx = state.types.indexOf(type);
+    if (idx === -1) state.types.push(type); else state.types.splice(idx, 1);
+  }
+  updateTypeChips(); updateSectionLabels();
+});
+document.getElementById('show-more-row').addEventListener('click', function(e) {
+  var chip = e.target.closest('[data-type]');
+  if (!chip) return;
+  var type = chip.getAttribute('data-type');
+  var idx = state.types.indexOf(type);
+  if (idx === -1) state.types.push(type); else state.types.splice(idx, 1);
+  updateTypeChips(); updateSectionLabels();
+});
+document.getElementById('show-more-btn').addEventListener('click', function() {
+  state.showMoreTypes = !state.showMoreTypes;
+  document.getElementById('show-more-row').classList.toggle('visible', state.showMoreTypes);
+  document.getElementById('show-more-icon').setAttribute('data-lucide', state.showMoreTypes ? 'chevron-up' : 'chevron-down');
+  lucide.createIcons();
+});
+function updateTypeChips() {
+  var isAll = state.types.length === 0;
+  document.querySelectorAll('#type-chips [data-type]').forEach(function(chip) {
+    var t = chip.getAttribute('data-type'); if (!t) return;
+    chip.classList.toggle('active', t === 'ALL' ? isAll : state.types.indexOf(t) !== -1);
+  });
+  document.querySelectorAll('#show-more-row [data-type]').forEach(function(chip) {
+    chip.classList.toggle('active', state.types.indexOf(chip.getAttribute('data-type')) !== -1);
+  });
+}
+
+// ─── Context ──────────────────────────────────────────────────────────────────
+document.getElementById('context-chips').addEventListener('click', function(e) {
+  var chip = e.target.closest('[data-context]'); if (!chip) return;
+  state.contextFilter = chip.getAttribute('data-context');
+  document.querySelectorAll('[data-context]').forEach(function(c) {
+    c.classList.toggle('active', c.getAttribute('data-context') === state.contextFilter);
+  });
+  updateSectionLabels();
+});
+
+// ─── Status / Instance chips ──────────────────────────────────────────────────
+function handleStatusClick(e) {
+  var chip = e.target.closest('[data-status]'); if (!chip) return;
+  var status = chip.getAttribute('data-status');
+  var idx = state.statusChips.indexOf(status);
+  if (idx === -1) state.statusChips.push(status); else state.statusChips.splice(idx, 1);
+  chip.classList.toggle('active', state.statusChips.indexOf(status) !== -1);
+  updateSectionLabels();
+}
+document.getElementById('status-chips').addEventListener('click', handleStatusClick);
+document.getElementById('instance-chips').addEventListener('click', handleStatusClick);
+
+// ─── Conditions ───────────────────────────────────────────────────────────────
+function getCondById(id) {
+  for (var i = 0; i < state.conditions.length; i++) {
+    if (state.conditions[i].id === id) return state.conditions[i];
+  }
+  return null;
+}
+
+function addCondition() {
+  var id = ++_conditionIdCounter;
+  var prop = 'fill';
+  state.conditions.push({ id: id, property: prop, operator: getDefaultOperator(prop), value: '' });
+  renderConditionRow(state.conditions[state.conditions.length - 1]);
+  updateLogicRow(); updateSectionLabels(); updateScrollbar();
+}
+
+function removeCondition(id) {
+  state.conditions = state.conditions.filter(function(c) { return c.id !== id; });
+  var row = document.querySelector('[data-cond-id="' + id + '"]');
+  if (row) row.remove();
+  updateLogicRow(); updateSectionLabels(); updateScrollbar();
+}
+
+function buildValueInput(prop, op, val, condId) {
+  var vtype = getValueType(op);
+  if (!vtype) return null;
+
+  if (vtype === 'range') {
+    var parts = val ? val.split(':') : [];
+    var wrap = document.createElement('span');
+    wrap.className = 'cond-range-wrap';
+    var from = document.createElement('input');
+    from.type = 'number'; from.min = '0'; from.value = parts[0] || '0';
+    from.className = 'cond-range-input'; from.placeholder = '0';
+    var sep = document.createElement('span');
+    sep.className = 'cond-range-sep'; sep.textContent = '–';
+    var to = document.createElement('input');
+    to.type = 'number'; to.min = '0'; to.value = parts[1] || '0';
+    to.className = 'cond-range-input'; to.placeholder = '0';
+    var sync = function() { var c = getCondById(condId); if (c) c.value = from.value + ':' + to.value; };
+    from.addEventListener('input', sync); to.addEventListener('input', sync); sync();
+    wrap.appendChild(from); wrap.appendChild(sep); wrap.appendChild(to);
+    return wrap;
+  }
+
+  var input = document.createElement('input');
+  input.className = 'cond-value';
+  if (vtype === 'color') {
+    input.type = 'color'; input.value = val || '#ffffff';
+  } else if (vtype === 'number') {
+    input.type = 'number'; input.min = '0'; input.value = val || '0'; input.placeholder = '0';
+  } else if (vtype === 'percent') {
+    input.type = 'number'; input.min = '0'; input.max = '100'; input.value = val || '100'; input.placeholder = '100';
+  } else if (vtype === 'text') {
+    input.type = 'text'; input.className += ' cond-text';
+    input.value = val || '';
+    input.placeholder = prop === 'font-family' ? 'e.g. Inter' : 'e.g. Bold';
+    input.autocomplete = 'off'; input.spellcheck = false;
+  }
+  input.addEventListener('input', function() { var c = getCondById(condId); if (c) c.value = input.value; });
+  return input;
+}
+
+function rebuildValueInput(row, cond, removeBtn) {
+  var old = row.querySelector('.cond-value, .cond-range-wrap');
+  if (old) old.remove();
+  var el = buildValueInput(cond.property, cond.operator, cond.value, cond.id);
+  if (el) row.insertBefore(el, removeBtn);
+}
+
+function renderConditionRow(cond) {
+  var row = document.createElement('div');
+  row.className = 'condition-row';
+  row.setAttribute('data-cond-id', cond.id);
+
+  // Property selector
+  var propWrap = document.createElement('div');
+  propWrap.className = 'custom-select prop';
+  var propTrigger = document.createElement('div');
+  propTrigger.className = 'select-trigger';
+  var propLabel = document.createElement('span');
+  propLabel.className = 'select-trigger-label';
+  propLabel.textContent = (PROPERTIES.find(function(p) { return p.value === cond.property; }) || PROPERTIES[0]).label;
+  var propArrow = document.createElement('span');
+  propArrow.className = 'select-trigger-icon';
+  propArrow.innerHTML = '<i data-lucide="chevron-down" class="ic-10"></i>';
+  propTrigger.appendChild(propLabel); propTrigger.appendChild(propArrow);
+  propTrigger.addEventListener('click', function(e) {
+    e.stopPropagation();
+    openDropdown(propTrigger, PROPERTIES, cond.property, function(val) {
+      var c = getCondById(cond.id); if (!c) return;
+      c.property = val; c.operator = getDefaultOperator(val); c.value = '';
+      propLabel.textContent = (PROPERTIES.find(function(p) { return p.value === val; }) || PROPERTIES[0]).label;
+      var newOps = OPERATORS[val] || [];
+      opLabel.textContent = newOps.length ? newOps[0].label : '';
+      rebuildValueInput(row, c, removeBtn); updateScrollbar();
+    });
+  });
+  propWrap.appendChild(propTrigger);
+
+  // Operator selector
+  var opWrap = document.createElement('div');
+  opWrap.className = 'custom-select op';
+  var opTrigger = document.createElement('div');
+  opTrigger.className = 'select-trigger';
+  var opLabel = document.createElement('span');
+  opLabel.className = 'select-trigger-label';
+  var ops = OPERATORS[cond.property] || [];
+  var currentOp = ops.find(function(o) { return o.value === cond.operator; });
+  opLabel.textContent = currentOp ? currentOp.label : (ops[0] ? ops[0].label : '');
+  var opArrow = document.createElement('span');
+  opArrow.className = 'select-trigger-icon';
+  opArrow.innerHTML = '<i data-lucide="chevron-down" class="ic-10"></i>';
+  opTrigger.appendChild(opLabel); opTrigger.appendChild(opArrow);
+  opTrigger.addEventListener('click', function(e) {
+    e.stopPropagation();
+    var c = getCondById(cond.id); if (!c) return;
+    openDropdown(opTrigger, OPERATORS[c.property] || [], c.operator, function(val) {
+      c.operator = val; c.value = '';
+      var op = (OPERATORS[c.property] || []).find(function(o) { return o.value === val; });
+      opLabel.textContent = op ? op.label : '';
+      rebuildValueInput(row, c, removeBtn); updateScrollbar();
+    });
+  });
+  opWrap.appendChild(opTrigger);
+
+  // Remove button
+  var removeBtn = document.createElement('button');
+  removeBtn.type = 'button'; removeBtn.className = 'cond-remove';
+  removeBtn.innerHTML = '<i data-lucide="x" class="ic-12"></i>';
+  removeBtn.addEventListener('click', function() { removeCondition(cond.id); });
+
+  row.appendChild(propWrap);
+  row.appendChild(opWrap);
+  row.appendChild(removeBtn);
+  rebuildValueInput(row, cond, removeBtn);
+  document.getElementById('condition-rows').appendChild(row);
+  lucide.createIcons();
+}
+
+function updateLogicRow() {
+  document.getElementById('logic-row').classList.toggle('visible', state.conditions.length >= 2);
+}
+document.getElementById('add-condition-btn').addEventListener('click', addCondition);
+document.getElementById('logic-row').addEventListener('click', function(e) {
+  var pill = e.target.closest('[data-logic]'); if (!pill) return;
+  state.conditionLogic = pill.getAttribute('data-logic');
+  document.querySelectorAll('[data-logic]').forEach(function(p) {
+    p.classList.toggle('active', p.getAttribute('data-logic') === state.conditionLogic);
+  });
+});
+
+// ─── Clear all ────────────────────────────────────────────────────────────────
+document.getElementById('clear-btn').addEventListener('click', function() {
+  closeAllDropdowns();
+  state.nameValue = ''; state.exactMatch = false; state.caseSensitive = false;
+  state.types = []; state.contextFilter = 'all'; state.statusChips = [];
+  state.conditions = []; state.conditionLogic = 'AND';
+  document.getElementById('name-input').value = '';
+  document.getElementById('exact-toggle').classList.remove('active');
+  document.getElementById('case-toggle').classList.remove('active');
+  updateTypeChips();
+  document.querySelectorAll('[data-context]').forEach(function(c) {
+    c.classList.toggle('active', c.getAttribute('data-context') === 'all');
+  });
+  document.querySelectorAll('[data-status]').forEach(function(c) { c.classList.remove('active'); });
+  document.getElementById('condition-rows').innerHTML = '';
+  document.getElementById('logic-row').classList.remove('visible');
+  updateSectionLabels(); setCountLabel('ready'); updateScrollbar();
+});
+
+// ─── Select button ────────────────────────────────────────────────────────────
+document.getElementById('select-btn').addEventListener('click', function() {
+  this.disabled = true; this.textContent = 'Selecting…';
+  parent.postMessage({ pluginMessage: { type: 'run', config: buildConfig() } }, '*');
+});
+
+// ─── Plugin messages ──────────────────────────────────────────────────────────
+window.onmessage = function(event) {
+  var msg = event.data.pluginMessage; if (!msg) return;
+
+  if (msg.type === 'init' || msg.type === 'selectionChange') {
+    state.hasSelection = msg.hasSelection;
+    if (!state.hasSelection && state.scope !== 'page') state.scope = 'page';
+    updateScopePills();
+  }
+  if (msg.type === 'done') {
+    var btn = document.getElementById('select-btn');
+    btn.disabled = false; btn.textContent = 'Select Nodes';
+    if (msg.capped) setCountLabel('capped', msg.count, msg.total);
+    else setCountLabel('done', msg.count);
+    document.getElementById('progress-bar').classList.remove('visible');
+  }
+  if (msg.type === 'progress') {
+    if (msg.phase === 'scan') {
+      setCountLabel('searching', 'Scanning… ' + msg.visited.toLocaleString() + ' nodes');
+    } else {
+      var pct = Math.round((msg.processed / msg.total) * 100);
+      document.getElementById('progress-bar').classList.add('visible');
+      document.getElementById('progress-fill').style.width = pct + '%';
+    }
+  }
+  if (msg.type === 'error') {
+    var btn2 = document.getElementById('select-btn');
+    btn2.disabled = false; btn2.textContent = 'Select Nodes';
+    showErrorToast(msg.message); setCountLabel('ready');
+    document.getElementById('progress-bar').classList.remove('visible');
+  }
+  if (msg.type === 'log') addLogEntry(msg);
+};
+
+// ─── Log panel ────────────────────────────────────────────────────────────────
+var logEntries = []; // { time, level, message }
+var logList = document.getElementById('log-list');
+var copyLogBtn = document.getElementById('copy-log-btn');
+var copyLogLabel = document.getElementById('copy-log-label');
+
+copyLogBtn.addEventListener('click', copyLogs);
+
+function addLogEntry(entry) {
+  logEntries.push(entry);
+  var row = document.createElement('div');
+  row.className = 'log-entry' + (entry.level === 'error' ? ' error' : '');
+  var timeSpan = document.createElement('span');
+  timeSpan.className = 'log-time';
+  timeSpan.textContent = entry.time;
+  row.appendChild(timeSpan);
+  row.appendChild(document.createTextNode(entry.message));
+  if (logList.querySelector('.log-empty')) logList.innerHTML = '';
+  logList.appendChild(row);
+  logList.scrollTop = logList.scrollHeight;
+}
+
+function copyLogs() {
+  var text = logEntries.length
+    ? logEntries.map(function(e) { return '[' + e.time + '] ' + (e.level === 'error' ? 'ERROR: ' : '') + e.message; }).join('\n')
+    : 'No actions yet.';
+  var ta = document.createElement('textarea');
+  ta.value = text;
+  ta.style.position = 'fixed';
+  ta.style.opacity = '0';
+  document.body.appendChild(ta);
+  ta.focus();
+  ta.select();
+  try {
+    document.execCommand('copy');
+    copyLogLabel.textContent = 'Copied';
+    copyLogBtn.classList.add('copied');
+    setTimeout(function() { copyLogLabel.textContent = 'Copy'; copyLogBtn.classList.remove('copied'); }, 1200);
+  } catch (e) {
+    copyLogLabel.textContent = 'Failed';
+  }
+  document.body.removeChild(ta);
+}
+
+// ─── Footer links ─────────────────────────────────────────────────────────────
+document.getElementById('footer-x').addEventListener('click', function() {
+  parent.postMessage({ pluginMessage: { type: 'open_url', url: 'https://twitter.com/danielfransix' } }, '*');
+});
+document.getElementById('footer-coffee').addEventListener('click', function() {
+  parent.postMessage({ pluginMessage: { type: 'open_url', url: 'https://buymeacoffee.com/danielfransix' } }, '*');
+});
+
+// ─── Custom scrollbar ─────────────────────────────────────────────────────────
+function updateScrollbar() {
+  var body  = document.getElementById('scrollable-body');
+  var thumb = document.getElementById('scrollbar-thumb');
+  var track = document.getElementById('scrollbar-track');
+  var trackH = track.clientHeight;
+  var contentH = body.scrollHeight;
+  var viewH = body.clientHeight;
+  if (contentH <= viewH) { thumb.style.display = 'none'; return; }
+  thumb.style.display = 'block';
+  var thumbH = Math.max(32, (viewH / contentH) * trackH);
+  var maxScroll = contentH - viewH;
+  var thumbTop  = (body.scrollTop / maxScroll) * (trackH - thumbH);
+  thumb.style.height = thumbH + 'px';
+  thumb.style.top    = thumbTop + 'px';
+}
+
+(function() {
+  var body  = document.getElementById('scrollable-body');
+  var thumb = document.getElementById('scrollbar-thumb');
+  var track = document.getElementById('scrollbar-track');
+  body.addEventListener('scroll', updateScrollbar);
+
+  var isDragging = false, startY = 0, startTop = 0;
+  thumb.addEventListener('mousedown', function(e) {
+    e.preventDefault(); isDragging = true;
+    startY = e.clientY; startTop = parseFloat(thumb.style.top) || 0;
+    thumb.classList.add('dragging');
+  });
+  document.addEventListener('mousemove', function(e) {
+    if (!isDragging) return;
+    var thumbH  = thumb.offsetHeight;
+    var trackH  = track.clientHeight;
+    var delta   = e.clientY - startY;
+    var newTop  = Math.max(0, Math.min(startTop + delta, trackH - thumbH));
+    var contentH = body.scrollHeight;
+    var viewH    = body.clientHeight;
+    body.scrollTop = (newTop / (trackH - thumbH)) * (contentH - viewH);
+  });
+  document.addEventListener('mouseup', function() {
+    if (isDragging) { isDragging = false; thumb.classList.remove('dragging'); }
+  });
+  setTimeout(updateScrollbar, 80);
+})();
+
+// ─── Boot ─────────────────────────────────────────────────────────────────────
+document.addEventListener('DOMContentLoaded', function() { lucide.createIcons(); updateScrollbar(); });
+lucide.createIcons();
+</script>
+</body>
+</html>

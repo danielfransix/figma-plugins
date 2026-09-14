@@ -1,0 +1,2072 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Figma Linter</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600&family=JetBrains+Mono:wght@400&display=swap">
+<script src="https://unpkg.com/lucide@latest/dist/umd/lucide.min.js"></script>
+<style>
+/* ── Tokens ──────────────────────────────────────────────────────────────── */
+:root {
+  /* Aliased to Figma's own injected theme (figma.showUI({ themeColors: true })),
+     so this plugin auto-matches the user's real light/dark Figma theme. */
+  --bg-canvas:      var(--figma-color-bg, #141414);
+  --bg-panel:       var(--figma-color-bg-secondary, #1a1a1a);
+  --bg-surface:     var(--figma-color-bg-tertiary, #202020);
+  --bg-hover:       var(--figma-color-bg-hover, #282828);
+  --bg-active:      var(--figma-color-bg-hover, #303030);
+  --border:         var(--figma-color-border, #2a2a2a);
+  --border-med:     var(--figma-color-border-strong, #333333);
+  --border-focus:   var(--figma-color-bg-brand, #fb923c);
+
+  --text-primary:   var(--figma-color-text, #e0e0e0);
+  --text-secondary: var(--figma-color-text-secondary, #888888);
+  --text-muted:     var(--figma-color-text-tertiary, #555555);
+  --text-disabled:  var(--figma-color-text-disabled, #3a3a3a);
+
+  --accent:         var(--figma-color-bg-brand, #fb923c);
+  --accent-hover:   var(--figma-color-bg-brand-hover, #e5841e);
+  --border-sub:     var(--figma-color-border, #1f1f1f);
+  --error:          var(--figma-color-text-danger, #f87171);
+  --error-bg:       rgba(248, 113, 113, 0.08);
+  --warning:        var(--figma-color-text-warning, #fbbf24);
+  --warning-bg:     rgba(251, 191, 36, 0.08);
+  --success:        var(--figma-color-text-success, #4ade80);
+  --variable:       #a78bfa;
+  --variable-bg:    rgba(167, 139, 250, 0.1);
+
+  --radius-sm:      4px;
+  --radius-md:      6px;
+  --radius-lg:      10px;
+  --radius-pill:    999px;
+
+  --font-body:      'Plus Jakarta Sans', system-ui, sans-serif;
+  --font-mono:      'JetBrains Mono', Consolas, monospace;
+  --fs-xs:          10px;
+  --fs-sm:          11px;
+  --fs-base:        12px;
+  --fs-md:          13px;
+  --fs-lg:          15px;
+
+  --duration:       140ms;
+  --ease:           cubic-bezier(0.2, 0, 0, 1);
+}
+
+/* ── Reset ───────────────────────────────────────────────────────────────── */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+html, body {
+  width: 480px;
+  height: 600px;
+  background: var(--bg-canvas);
+  color: var(--text-primary);
+  font-family: var(--font-body);
+  font-size: var(--fs-base);
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+  overflow: hidden;
+}
+
+/* ── App shell ───────────────────────────────────────────────────────────── */
+#app {
+  display: flex;
+  flex-direction: column;
+  height: 600px;
+  overflow: hidden;
+}
+
+/* ── Header ──────────────────────────────────────────────────────────────── */
+#header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 14px 16px 12px;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-panel);
+  flex-shrink: 0;
+}
+
+/* Scope toggle */
+#scope-toggle {
+  display: flex;
+  background: var(--bg-canvas);
+  border: 1px solid var(--border-med);
+  border-radius: var(--radius-md);
+  padding: 2px;
+  gap: 2px;
+}
+
+.scope-btn {
+  padding: 4px 10px;
+  border-radius: calc(var(--radius-md) - 2px);
+  border: none;
+  background: transparent;
+  color: var(--text-secondary);
+  font-family: var(--font-body);
+  font-size: var(--fs-sm);
+  font-weight: 500;
+  cursor: pointer;
+  transition: background var(--duration) var(--ease), color var(--duration) var(--ease);
+  white-space: nowrap;
+}
+.scope-btn:hover { background: var(--bg-hover); color: var(--text-primary); }
+.scope-btn.active {
+  background: var(--bg-active);
+  color: var(--text-primary);
+}
+
+/* Scan button */
+#btn-scan {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 14px;
+  border-radius: var(--radius-md);
+  border: none;
+  background: var(--accent);
+  color: #fff;
+  font-family: var(--font-body);
+  font-size: var(--fs-sm);
+  font-weight: 600;
+  cursor: pointer;
+  transition: background var(--duration) var(--ease);
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+#btn-scan:hover { background: var(--accent-hover); }
+#btn-scan:disabled {
+  background: var(--bg-active);
+  color: var(--text-muted);
+  cursor: not-allowed;
+}
+
+/* ── Tabs ────────────────────────────────────────────────────────────────── */
+#tab-bar {
+  display: flex;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-panel);
+  flex-shrink: 0;
+  padding: 0 12px;
+  gap: 0;
+}
+
+.tab-btn {
+  padding: 10px 14px 9px;
+  border: none;
+  border-bottom: 2px solid transparent;
+  background: transparent;
+  color: var(--text-secondary);
+  font-family: var(--font-body);
+  font-size: var(--fs-sm);
+  font-weight: 500;
+  cursor: pointer;
+  transition: color var(--duration) var(--ease), border-color var(--duration) var(--ease);
+  white-space: nowrap;
+  margin-bottom: -1px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.tab-btn:hover { color: var(--text-primary); }
+.tab-btn.active { color: var(--accent); border-bottom-color: var(--accent); }
+
+.tab-count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 16px;
+  height: 16px;
+  padding: 0 4px;
+  border-radius: var(--radius-pill);
+  background: var(--bg-active);
+  color: var(--text-secondary);
+  font-size: var(--fs-xs);
+  font-weight: 600;
+  line-height: 1;
+}
+.tab-btn.active .tab-count {
+  background: rgba(251, 146, 60, 0.15);
+  color: var(--accent);
+}
+
+/* ── Scan summary bar ────────────────────────────────────────────────────── */
+.scan-summary {
+  padding: 5px 16px;
+  background: var(--bg-panel);
+  border-bottom: 1px solid var(--border);
+  font-size: var(--fs-xs);
+  color: var(--text-secondary);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+/* ── Progress bar ────────────────────────────────────────────────────────── */
+#progress-wrap {
+  padding: 10px 16px;
+  display: none;
+  flex-direction: column;
+  gap: 6px;
+  background: var(--bg-panel);
+  border-bottom: 1px solid var(--border);
+}
+#progress-wrap.visible { display: flex; }
+
+#progress-label {
+  font-size: var(--fs-sm);
+  color: var(--text-secondary);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+#progress-bar-track {
+  height: 3px;
+  background: var(--border-med);
+  border-radius: var(--radius-pill);
+  overflow: hidden;
+}
+
+#progress-bar-fill {
+  height: 100%;
+  background: var(--accent);
+  border-radius: var(--radius-pill);
+  width: 0%;
+  transition: width 80ms linear;
+}
+
+/* ── Tab panels ──────────────────────────────────────────────────────────── */
+.tab-panel {
+  display: none;
+  flex-direction: column;
+  flex: 1;
+}
+.tab-panel.active { display: flex; }
+
+/* ── Filter pills ────────────────────────────────────────────────────────── */
+#filter-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 12px 16px 10px;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-panel);
+  flex-shrink: 0;
+}
+
+.filter-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 10px;
+  border-radius: var(--radius-pill);
+  border: 1px solid var(--border-med);
+  background: transparent;
+  color: var(--text-secondary);
+  font-family: var(--font-body);
+  font-size: var(--fs-xs);
+  font-weight: 500;
+  cursor: pointer;
+  transition: all var(--duration) var(--ease);
+  white-space: nowrap;
+}
+.filter-pill:hover { border-color: var(--border-focus); color: var(--text-primary); }
+.filter-pill.active {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+.filter-pill .pill-count {
+  font-weight: 700;
+  opacity: 0.85;
+}
+
+/* ── Error list ──────────────────────────────────────────────────────────── */
+#error-list {
+  flex: 1;
+  overflow-y: auto;
+  padding: 8px 0 16px;
+}
+#error-list::-webkit-scrollbar { width: 6px; }
+#error-list::-webkit-scrollbar-track { background: transparent; }
+#error-list::-webkit-scrollbar-thumb { background: var(--border-med); border-radius: 3px; }
+
+/* Empty state */
+.empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 48px 24px;
+  color: var(--text-muted);
+  text-align: center;
+}
+.empty-state .empty-icon {
+  width: 40px;
+  height: 40px;
+  opacity: 0.3;
+}
+.empty-state .empty-title {
+  font-size: var(--fs-md);
+  font-weight: 500;
+  color: var(--text-secondary);
+}
+.empty-state .empty-sub {
+  font-size: var(--fs-sm);
+  line-height: 1.6;
+  max-width: 260px;
+}
+
+/* Error group */
+.error-group {
+  border-bottom: 1px solid var(--border);
+}
+
+.error-group-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 16px;
+  cursor: pointer;
+  -webkit-user-select: none;
+  user-select: none;
+  transition: background var(--duration) var(--ease);
+}
+.error-group-header:hover { background: var(--bg-hover); }
+
+.severity-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+.severity-dot.error { background: var(--error); }
+.severity-dot.warning { background: var(--warning); }
+
+.group-icon {
+  color: var(--text-secondary);
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+}
+.group-icon.error-color { color: var(--error); }
+.group-icon.warning-color { color: var(--warning); }
+
+.group-message {
+  flex: 1;
+  font-size: var(--fs-sm);
+  font-weight: 500;
+  color: var(--text-primary);
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.group-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 20px;
+  height: 18px;
+  padding: 0 5px;
+  border-radius: var(--radius-pill);
+  font-size: var(--fs-xs);
+  font-weight: 600;
+  flex-shrink: 0;
+}
+.group-badge.error { background: var(--error-bg); color: var(--error); }
+.group-badge.warning { background: var(--warning-bg); color: var(--warning); }
+
+.group-chevron {
+  color: var(--text-muted);
+  flex-shrink: 0;
+  transition: transform var(--duration) var(--ease);
+}
+.error-group.open .group-chevron { transform: rotate(90deg); }
+
+/* Variable badge */
+.var-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 2px 7px;
+  border-radius: var(--radius-pill);
+  background: var(--variable-bg);
+  color: var(--variable);
+  font-size: var(--fs-xs);
+  font-weight: 500;
+  cursor: pointer;
+  border: 1px solid rgba(167,139,250,0.2);
+  transition: background var(--duration) var(--ease);
+  flex-shrink: 0;
+  white-space: nowrap;
+  max-width: 140px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.var-badge:hover { background: rgba(167,139,250,0.2); }
+
+/* Group actions */
+.group-actions {
+  display: flex;
+  gap: 6px;
+  padding: 4px 16px 8px 36px;
+}
+
+/* Error group body */
+.error-group-body {
+  display: none;
+}
+.error-group.open .error-group-body { display: block; }
+
+/* Layer row inside group */
+.layer-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 16px 7px 36px;
+  border-top: 1px solid var(--border);
+  transition: background var(--duration) var(--ease);
+}
+.layer-row:hover { background: var(--bg-hover); }
+
+.layer-icon {
+  color: var(--text-muted);
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+}
+
+.layer-name {
+  flex: 1;
+  font-size: var(--fs-sm);
+  color: var(--text-secondary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+
+.layer-actions {
+  display: flex;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+/* ── Buttons ─────────────────────────────────────────────────────────────── */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 10px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-med);
+  background: transparent;
+  color: var(--text-secondary);
+  font-family: var(--font-body);
+  font-size: var(--fs-xs);
+  font-weight: 500;
+  cursor: pointer;
+  transition: all var(--duration) var(--ease);
+  white-space: nowrap;
+}
+.btn:hover { border-color: var(--border-focus); color: var(--text-primary); background: var(--bg-hover); }
+
+.btn-primary {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+.btn-primary:hover { background: var(--accent-hover); border-color: var(--accent-hover); color: #fff; }
+
+.btn-ghost {
+  border-color: transparent;
+  color: var(--text-muted);
+}
+.btn-ghost:hover { border-color: var(--border-med); color: var(--text-primary); background: var(--bg-hover); }
+
+.btn-danger {
+  border-color: rgba(248,113,113,0.3);
+  color: var(--error);
+}
+.btn-danger:hover { background: var(--error-bg); border-color: var(--error); }
+
+.btn-icon {
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius-sm);
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: all var(--duration) var(--ease);
+}
+.btn-icon:hover { border-color: var(--border-med); color: var(--text-primary); background: var(--bg-hover); }
+.btn-icon:disabled { opacity: 0.3; cursor: not-allowed; pointer-events: none; }
+
+/* ── Layers tab ──────────────────────────────────────────────────────────── */
+#layers-list {
+  flex: 1;
+  overflow-y: auto;
+  padding: 8px 0 16px;
+}
+#layers-list::-webkit-scrollbar { width: 6px; }
+#layers-list::-webkit-scrollbar-thumb { background: var(--border-med); border-radius: 3px; }
+
+.layer-tree-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 16px;
+  cursor: pointer;
+  transition: background var(--duration) var(--ease);
+  border-bottom: 1px solid var(--border);
+}
+.layer-tree-row:hover { background: var(--bg-hover); }
+.layer-tree-row.selected { background: rgba(251, 146, 60, 0.08); }
+
+.layer-tree-indent { flex-shrink: 0; }
+.layer-tree-icon { color: var(--text-muted); flex-shrink: 0; display: flex; align-items: center; }
+.layer-tree-name {
+  flex: 1;
+  font-size: var(--fs-sm);
+  color: var(--text-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+.layer-tree-badges {
+  display: flex;
+  gap: 4px;
+  flex-shrink: 0;
+}
+.count-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 18px;
+  height: 16px;
+  padding: 0 4px;
+  border-radius: var(--radius-pill);
+  font-size: var(--fs-xs);
+  font-weight: 700;
+  line-height: 1;
+}
+.count-badge.error { background: var(--error-bg); color: var(--error); }
+.count-badge.warning { background: var(--warning-bg); color: var(--warning); }
+
+/* ── Detail panel ────────────────────────────────────────────────────────── */
+#detail-panel {
+  position: fixed;
+  top: 0;
+  right: -480px;
+  width: 480px;
+  height: 100%;
+  background: var(--bg-panel);
+  border-left: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  z-index: 100;
+  transition: right var(--duration) var(--ease);
+}
+#detail-panel.open { right: 0; }
+
+#detail-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+
+#detail-nav {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-left: auto;
+}
+
+#detail-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 12px 0;
+}
+#detail-body::-webkit-scrollbar { width: 6px; }
+#detail-body::-webkit-scrollbar-thumb { background: var(--border-med); border-radius: 3px; }
+
+.detail-error-row {
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.detail-error-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.detail-error-message {
+  font-size: var(--fs-sm);
+  font-weight: 500;
+  color: var(--text-primary);
+}
+
+.detail-error-value {
+  font-size: var(--fs-xs);
+  color: var(--text-secondary);
+  font-family: monospace;
+}
+
+.detail-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+/* ── Report tab ──────────────────────────────────────────────────────────── */
+#report-content {
+  flex: 1;
+  overflow-y: auto;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+#report-content::-webkit-scrollbar { width: 6px; }
+#report-content::-webkit-scrollbar-thumb { background: var(--border-med); border-radius: 3px; }
+
+.stats-row {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+}
+
+.stat-card {
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 14px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.stat-value {
+  font-size: 22px;
+  font-weight: 700;
+  line-height: 1;
+  color: var(--text-primary);
+}
+.stat-value.error { color: var(--error); }
+.stat-value.warning { color: var(--warning); }
+
+.stat-label {
+  font-size: var(--fs-xs);
+  color: var(--text-secondary);
+  font-weight: 500;
+}
+
+.report-section-title {
+  font-size: var(--fs-sm);
+  font-weight: 600;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--border);
+}
+
+.rule-breakdown-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.rule-breakdown-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  border-radius: var(--radius-md);
+  transition: background var(--duration) var(--ease);
+}
+.rule-breakdown-row:hover { background: var(--bg-hover); }
+
+.rule-breakdown-label {
+  flex: 1;
+  font-size: var(--fs-sm);
+  color: var(--text-primary);
+}
+
+.rule-breakdown-count {
+  font-size: var(--fs-sm);
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+
+.export-row {
+  display: flex;
+  justify-content: flex-end;
+  padding-top: 4px;
+}
+
+/* ── Settings tab ────────────────────────────────────────────────────────── */
+#settings-content {
+  flex: 1;
+  overflow-y: auto;
+  padding: 20px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+#settings-content::-webkit-scrollbar { width: 6px; }
+#settings-content::-webkit-scrollbar-thumb { background: var(--border-med); border-radius: 3px; }
+
+.settings-section {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.settings-section-title {
+  font-size: var(--fs-sm);
+  font-weight: 600;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+}
+
+.settings-label {
+  font-size: var(--fs-sm);
+  font-weight: 500;
+  color: var(--text-primary);
+}
+
+.settings-sub {
+  font-size: var(--fs-xs);
+  color: var(--text-secondary);
+  margin-top: 2px;
+}
+
+/* Token tag input */
+.token-input-wrap {
+  background: var(--bg-canvas);
+  border: 1px solid var(--border-med);
+  border-radius: var(--radius-md);
+  padding: 6px 8px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  min-height: 38px;
+  cursor: text;
+  transition: border-color var(--duration) var(--ease);
+}
+.token-input-wrap:focus-within { border-color: var(--border-focus); }
+
+.token-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 7px 2px 8px;
+  background: var(--bg-active);
+  border-radius: var(--radius-pill);
+  font-size: var(--fs-xs);
+  color: var(--text-primary);
+  font-weight: 500;
+}
+
+.token-tag-remove {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 12px;
+  height: 12px;
+  color: var(--text-muted);
+  cursor: pointer;
+  border: none;
+  background: none;
+  padding: 0;
+}
+.token-tag-remove:hover { color: var(--error); }
+
+.token-input {
+  flex: 1;
+  min-width: 60px;
+  background: transparent;
+  border: none;
+  outline: none;
+  font-family: var(--font-body);
+  font-size: var(--fs-sm);
+  color: var(--text-primary);
+}
+.token-input::placeholder { color: var(--text-muted); }
+
+.token-reset-link {
+  font-size: var(--fs-xs);
+  color: var(--accent);
+  cursor: pointer;
+  background: none;
+  border: none;
+  font-family: var(--font-body);
+  padding: 0;
+}
+.token-reset-link:hover { text-decoration: underline; }
+
+/* Toggle row */
+.toggle-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--border);
+  cursor: pointer;
+}
+.toggle-row:last-child { border-bottom: none; }
+
+.toggle-row-text { flex: 1; }
+
+.toggle-switch {
+  position: relative;
+  width: 32px;
+  height: 18px;
+  flex-shrink: 0;
+}
+.toggle-switch input { opacity: 0; width: 0; height: 0; }
+
+.toggle-track {
+  position: absolute;
+  inset: 0;
+  background: var(--bg-active);
+  border-radius: var(--radius-pill);
+  border: 1px solid var(--border-med);
+  transition: background var(--duration) var(--ease), border-color var(--duration) var(--ease);
+  cursor: pointer;
+}
+.toggle-thumb {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 12px;
+  height: 12px;
+  background: var(--text-muted);
+  border-radius: 50%;
+  transition: transform var(--duration) var(--ease), background var(--duration) var(--ease);
+}
+.toggle-switch input:checked + .toggle-track { background: var(--accent); border-color: var(--accent); }
+.toggle-switch input:checked + .toggle-track .toggle-thumb { transform: translateX(14px); background: #fff; }
+
+/* ── Footer ──────────────────────────────────────────────────────────────── */
+#footer {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 0 20px;
+  height: 58px;
+  border-top: 1px solid var(--border-sub);
+  background: var(--bg-canvas);
+  flex-shrink: 0;
+}
+
+/* ── Log panel ── */
+#log-section { border-top: 1px solid var(--border-sub); padding: 10px 16px; display: flex; flex-direction: column; gap: 6px; flex-shrink: 0; }
+.log-header { display: flex; align-items: center; justify-content: space-between; }
+.log-label { font-size: var(--fs-sm); color: var(--text-secondary); font-weight: 500; text-transform: uppercase; letter-spacing: 0.04em; }
+.copy-log-btn {
+  display: flex; align-items: center; gap: 5px;
+  background: transparent; border: 1px solid var(--border); border-radius: var(--radius-sm);
+  color: var(--text-secondary); font-size: var(--fs-sm); font-family: inherit;
+  padding: 4px 8px; cursor: pointer; transition: background var(--duration) var(--ease), color var(--duration) var(--ease);
+}
+.copy-log-btn:hover { background: var(--bg-hover); color: var(--text-primary); }
+.copy-log-btn.copied { color: var(--accent); border-color: var(--accent); }
+.log-list {
+  max-height: 100px; overflow-y: auto;
+  background: var(--bg-panel); border: 1px solid var(--border); border-radius: var(--radius-md);
+  padding: 8px 10px;
+  font-family: var(--font-mono);
+  font-size: var(--fs-sm); line-height: 16px;
+}
+.log-empty { color: var(--text-secondary); }
+.log-entry { color: var(--text-secondary); white-space: pre-wrap; word-break: break-word; }
+.log-entry.error { color: var(--error); }
+.log-entry .log-time { color: var(--text-muted); margin-right: 6px; }
+
+.footer-brand {
+  font-family: 'Plus Jakarta Sans', sans-serif;
+  font-weight: 600;
+  font-size: 12px;
+  color: var(--text-primary);
+  letter-spacing: 0.04em;
+}
+
+.footer-version {
+  font-size: 11px;
+  color: var(--text-muted);
+  margin-left: 2px;
+}
+
+.footer-sep {
+  font-size: 12px;
+  color: var(--border);
+}
+
+.footer-link {
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.45);
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-family: var(--font-body);
+  padding: 0;
+  transition: color var(--duration) var(--ease);
+}
+.footer-link:hover { color: #fff; }
+
+/* ── Toast ───────────────────────────────────────────────────────────────── */
+#toast-container {
+  position: fixed;
+  bottom: 48px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 200;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  pointer-events: none;
+}
+
+.toast {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 14px;
+  background: var(--bg-active);
+  border: 1px solid var(--border-med);
+  border-radius: var(--radius-lg);
+  font-size: var(--fs-sm);
+  color: var(--text-primary);
+  box-shadow: 0 4px 16px rgba(0,0,0,0.4);
+  white-space: nowrap;
+  animation: toast-in 0.2s var(--ease);
+}
+.toast.success { border-color: var(--success); color: var(--success); }
+.toast.error-toast { border-color: var(--error); color: var(--error); }
+
+@keyframes toast-in {
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+/* ── Spinner ─────────────────────────────────────────────────────────────── */
+.spinner {
+  width: 14px;
+  height: 14px;
+  border: 2px solid rgba(255,255,255,0.15);
+  border-top-color: currentColor;
+  border-radius: 50%;
+  animation: spin 0.7s linear infinite;
+  flex-shrink: 0;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* ── Utilities ───────────────────────────────────────────────────────────── */
+.icon-sm { width: 13px; height: 13px; }
+.icon-md { width: 14px; height: 14px; }
+.spacer-8 { height: 8px; }
+.spacer-4 { height: 4px; }
+
+#detail-header-meta { flex: 1; min-width: 0; }
+#detail-node-name {
+  font-size: 13px;
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+#detail-node-type { font-size: 11px; color: var(--text-secondary); }
+#detail-nav-label { font-size: 11px; color: var(--text-secondary); padding: 0 4px; }
+
+.report-empty-note { font-size: 12px; color: var(--text-muted); padding: 8px 10px; }
+.scan-duration-note { font-size: 11px; color: var(--text-muted); }
+
+.hidden { display: none !important; }
+.sr-only {
+  position: absolute; width: 1px; height: 1px;
+  padding: 0; margin: -1px; overflow: hidden;
+  clip: rect(0,0,0,0); white-space: nowrap; border: 0;
+}
+</style>
+</head>
+<body>
+<div id="app">
+
+  <!-- Header -->
+  <header id="header">
+    <div id="scope-toggle" role="group" aria-label="Scan scope">
+      <button class="scope-btn active" data-scope="selection" aria-pressed="true">Selection</button>
+      <button class="scope-btn" data-scope="page" aria-pressed="false">Page</button>
+    </div>
+    <button id="btn-scan" aria-label="Run scan">
+      <i data-lucide="play" class="icon-sm"></i>
+      Scan
+    </button>
+  </header>
+
+  <!-- Tab bar -->
+  <nav id="tab-bar" role="tablist" aria-label="Plugin sections">
+    <button class="tab-btn active" role="tab" aria-selected="true" data-tab="issues" aria-controls="panel-issues">
+      Issues <span class="tab-count" id="tab-count-issues">0</span>
+    </button>
+    <button class="tab-btn" role="tab" aria-selected="false" data-tab="layers" aria-controls="panel-layers">
+      Layers <span class="tab-count" id="tab-count-layers">0</span>
+    </button>
+    <button class="tab-btn" role="tab" aria-selected="false" data-tab="report" aria-controls="panel-report">
+      Report
+    </button>
+    <button class="tab-btn" role="tab" aria-selected="false" data-tab="settings" aria-controls="panel-settings">
+      Settings
+    </button>
+  </nav>
+
+  <!-- Scan summary (persists after scan completes) -->
+  <div id="scan-summary" class="scan-summary hidden" aria-live="polite"></div>
+
+  <!-- Progress bar -->
+  <div id="progress-wrap" role="status" aria-live="polite">
+    <div id="progress-label">
+      <span class="spinner"></span>
+      <span id="progress-text">Scanning…</span>
+    </div>
+    <div id="progress-bar-track">
+      <div id="progress-bar-fill"></div>
+    </div>
+  </div>
+
+  <!-- Issues tab -->
+  <div class="tab-panel active" id="panel-issues" role="tabpanel" aria-labelledby="tab-btn-issues">
+    <div id="filter-bar" role="group" aria-label="Filter by rule type">
+      <button class="filter-pill active" data-filter="all">All <span class="pill-count" id="pill-all">0</span></button>
+      <button class="filter-pill" data-filter="fill_missing">Fill <span class="pill-count" id="pill-fill">0</span></button>
+      <button class="filter-pill" data-filter="stroke_missing">Stroke <span class="pill-count" id="pill-stroke">0</span></button>
+      <button class="filter-pill" data-filter="text_missing">Text <span class="pill-count" id="pill-text">0</span></button>
+      <button class="filter-pill" data-filter="effect_missing">Effect <span class="pill-count" id="pill-effect">0</span></button>
+      <button class="filter-pill" data-filter="radius_off_token">Radius <span class="pill-count" id="pill-radius">0</span></button>
+      <button class="filter-pill" data-filter="spacing_off_token">Spacing <span class="pill-count" id="pill-spacing">0</span></button>
+      <button class="filter-pill" data-filter="opacity_off_token">Opacity <span class="pill-count" id="pill-opacity">0</span></button>
+      <button class="filter-pill" data-filter="hidden_layer">Hidden <span class="pill-count" id="pill-hidden">0</span></button>
+      <button class="filter-pill" data-filter="naming_violation">Naming <span class="pill-count" id="pill-naming">0</span></button>
+    </div>
+    <div id="error-list" aria-label="Issues">
+      <div class="empty-state">
+        <i data-lucide="scan-search" class="empty-icon"></i>
+        <p class="empty-title">No scan yet</p>
+        <p class="empty-sub">Click Scan to check the current selection or page for design issues.</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- Layers tab -->
+  <div class="tab-panel" id="panel-layers" role="tabpanel" aria-labelledby="tab-btn-layers">
+    <div id="layers-list" aria-label="Layer tree">
+      <div class="empty-state">
+        <i data-lucide="layers" class="empty-icon"></i>
+        <p class="empty-title">No scan yet</p>
+        <p class="empty-sub">Run a scan to see a layer tree with annotated issues.</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- Report tab -->
+  <div class="tab-panel" id="panel-report" role="tabpanel" aria-labelledby="tab-btn-report">
+    <div id="report-content">
+      <div class="empty-state">
+        <i data-lucide="bar-chart-2" class="empty-icon"></i>
+        <p class="empty-title">No report yet</p>
+        <p class="empty-sub">Run a scan to generate a usage report.</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- Settings tab -->
+  <div class="tab-panel" id="panel-settings" role="tabpanel" aria-labelledby="tab-btn-settings">
+    <div id="settings-content">
+      <!-- Allowlists -->
+      <div class="settings-section">
+        <p class="settings-section-title">Token Allowlists</p>
+
+        <div>
+          <p class="settings-label">Border Radius</p>
+          <p class="settings-sub">Values (px) considered valid. Off-token values will be flagged.</p>
+          <div class="spacer-8"></div>
+          <div class="token-input-wrap" id="radius-tags-wrap">
+            <input class="token-input" id="radius-tag-input" type="text" placeholder="Add value, Enter" aria-label="Add border radius token">
+          </div>
+          <div class="spacer-4"></div>
+          <button class="token-reset-link" data-reset="radius">Reset to defaults</button>
+        </div>
+
+        <div>
+          <p class="settings-label">Spacing / Gap / Padding</p>
+          <p class="settings-sub">Values (px) considered valid for layout spacing properties.</p>
+          <div class="spacer-8"></div>
+          <div class="token-input-wrap" id="spacing-tags-wrap">
+            <input class="token-input" id="spacing-tag-input" type="text" placeholder="Add value, Enter" aria-label="Add spacing token">
+          </div>
+          <div class="spacer-4"></div>
+          <button class="token-reset-link" data-reset="spacing">Reset to defaults</button>
+        </div>
+
+        <div>
+          <p class="settings-label">Opacity</p>
+          <p class="settings-sub">Opacity values (0–1) considered valid. E.g. 0.5 = 50%.</p>
+          <div class="spacer-8"></div>
+          <div class="token-input-wrap" id="opacity-tags-wrap">
+            <input class="token-input" id="opacity-tag-input" type="text" placeholder="Add value, Enter" aria-label="Add opacity token">
+          </div>
+          <div class="spacer-4"></div>
+          <button class="token-reset-link" data-reset="opacity">Reset to defaults</button>
+        </div>
+      </div>
+
+      <!-- Toggles -->
+      <div class="settings-section">
+        <p class="settings-section-title">Lint Rules</p>
+
+        <label class="toggle-row">
+          <div class="toggle-row-text">
+            <p class="settings-label">Check vector layers</p>
+            <p class="settings-sub">Check VECTOR and BOOLEAN_OPERATION nodes for missing styles. Off by default as vectors are often one-offs.</p>
+          </div>
+          <div class="toggle-switch">
+            <input type="checkbox" id="toggle-lint-vectors" aria-label="Check vector layers">
+            <div class="toggle-track"><div class="toggle-thumb"></div></div>
+          </div>
+        </label>
+
+        <label class="toggle-row">
+          <div class="toggle-row-text">
+            <p class="settings-label">Warn on hidden layers</p>
+            <p class="settings-sub">Flag layers with visibility set to hidden as potential design clutter.</p>
+          </div>
+          <div class="toggle-switch">
+            <input type="checkbox" id="toggle-warn-hidden" checked aria-label="Warn on hidden layers">
+            <div class="toggle-track"><div class="toggle-thumb"></div></div>
+          </div>
+        </label>
+
+        <label class="toggle-row">
+          <div class="toggle-row-text">
+            <p class="settings-label">Warn on naming violations</p>
+            <p class="settings-sub">Flag layers with default Figma names like "Frame 5" or "Rectangle copy".</p>
+          </div>
+          <div class="toggle-switch">
+            <input type="checkbox" id="toggle-warn-naming" checked aria-label="Warn on naming violations">
+            <div class="toggle-track"><div class="toggle-thumb"></div></div>
+          </div>
+        </label>
+
+        <label class="toggle-row">
+          <div class="toggle-row-text">
+            <p class="settings-label">Show unused styles in Report</p>
+            <p class="settings-sub">List paint, text, and effect styles that have zero usages in the scanned scope.</p>
+          </div>
+          <div class="toggle-switch">
+            <input type="checkbox" id="toggle-show-unused" aria-label="Show unused styles in report">
+            <div class="toggle-track"><div class="toggle-thumb"></div></div>
+          </div>
+        </label>
+      </div>
+    </div>
+  </div>
+
+  <!-- Log -->
+  <div id="log-section">
+    <div class="log-header">
+      <span class="log-label">Log</span>
+      <button type="button" class="copy-log-btn" id="copy-log-btn">
+        <svg width="12" height="12" viewBox="0 0 12 12" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <rect x="4" y="4" width="7" height="7" rx="1" stroke="currentColor" stroke-width="1.1"/>
+          <path d="M2.5 8V2.5C2.5 1.94772 2.94772 1.5 3.5 1.5H8" stroke="currentColor" stroke-width="1.1"/>
+        </svg>
+        <span id="copy-log-label">Copy</span>
+      </button>
+    </div>
+    <div class="log-list" id="log-list">
+      <div class="log-empty">No actions yet.</div>
+    </div>
+  </div>
+
+  <!-- Footer -->
+  <footer id="footer">
+    <span class="footer-brand">Figma Linter</span>
+    <span class="footer-version">v1.0</span>
+    <span class="footer-sep">|</span>
+    <button type="button" class="footer-link" data-url="https://twitter.com/danielfransix">x.com/danielfransix</button>
+    <span class="footer-sep">|</span>
+    <button type="button" class="footer-link" data-url="https://buymeacoffee.com/danielfransix">☕ Buy me a coffee</button>
+  </footer>
+
+</div><!-- #app -->
+
+<!-- Detail panel (slide-in overlay) -->
+<div id="detail-panel" role="dialog" aria-label="Layer detail" aria-modal="true">
+  <div id="detail-header">
+    <button class="btn-icon" id="btn-detail-close" aria-label="Close detail panel">
+      <i data-lucide="x" class="icon-md"></i>
+    </button>
+    <div id="detail-header-meta">
+      <div id="detail-node-name"></div>
+      <div id="detail-node-type"></div>
+    </div>
+    <div id="detail-nav">
+      <button class="btn-icon" id="btn-detail-prev" aria-label="Previous layer with issues">
+        <i data-lucide="chevron-left" class="icon-md"></i>
+      </button>
+      <span id="detail-nav-label"></span>
+      <button class="btn-icon" id="btn-detail-next" aria-label="Next layer with issues">
+        <i data-lucide="chevron-right" class="icon-md"></i>
+      </button>
+    </div>
+  </div>
+  <div id="detail-body"></div>
+</div>
+
+<!-- Toast container -->
+<div id="toast-container" aria-live="assertive" aria-atomic="true"></div>
+
+<script>
+'use strict';
+
+// ── State ─────────────────────────────────────────────────────────────────
+var scanResults  = [];   // Array of { nodeId, nodeName, nodeType, errors[] }
+var reportData   = null;
+var activeTab    = 'issues';
+var activeFilter = 'all';
+var activeScope  = 'selection';
+var scanning     = false;
+var _progressPct = 0;
+var _lastDocChangedToast = 0;
+var settings     = {
+  lintVectors: false,
+  warnHidden: true,
+  warnNaming: true,
+  showUnusedStyles: false,
+  radiusAllowlist: [0, 2, 4, 8, 16, 24, 32, 9999],
+  spacingAllowlist: [0, 2, 4, 8, 12, 16, 24, 32, 40, 48, 64],
+  opacityAllowlist: [0, 0.08, 0.12, 0.16, 0.24, 0.32, 0.48, 0.64, 0.80, 0.88, 1]
+};
+
+// Nodes with issues in order (for prev/next navigation)
+var errorNodeIds = [];
+var detailIndex  = -1;
+
+// ── postMessage ───────────────────────────────────────────────────────────
+function postMsg(msg) {
+  parent.postMessage({ pluginMessage: msg }, '*');
+}
+
+// ── Helpers ───────────────────────────────────────────────────────────────
+var STYLE_RULES = ['fill_missing', 'stroke_missing', 'text_missing', 'effect_missing'];
+
+var RULE_LABELS = {
+  fill_missing:      'Missing fill style',
+  fill_mixed:        'Mixed fills',
+  stroke_missing:    'Missing stroke style',
+  stroke_mixed:      'Mixed strokes',
+  text_missing:      'Missing text style',
+  text_mixed:        'Mixed typography',
+  text_suggested:    'Suggested text style',
+  effect_missing:    'Missing effect style',
+  radius_off_token:  'Off-token border radius',
+  spacing_off_token: 'Off-token spacing',
+  opacity_off_token: 'Off-token opacity',
+  hidden_layer:      'Hidden layer',
+  naming_violation:  'Naming violation'
+};
+
+var RULE_ICONS = {
+  fill_missing:      'droplets',
+  fill_mixed:        'droplets',
+  stroke_missing:    'pen-tool',
+  stroke_mixed:      'pen-tool',
+  text_missing:      'type',
+  text_mixed:        'type',
+  text_suggested:    'type',
+  effect_missing:    'sparkles',
+  radius_off_token:  'corner-down-right',
+  spacing_off_token: 'move-horizontal',
+  opacity_off_token: 'blend',
+  hidden_layer:      'eye-off',
+  naming_violation:  'tag'
+};
+
+var NODE_ICONS = {
+  FRAME: 'frame', COMPONENT: 'component', INSTANCE: 'layers',
+  TEXT: 'type', RECTANGLE: 'square', ELLIPSE: 'circle',
+  GROUP: 'group', SECTION: 'layout-grid', LINE: 'minus',
+  VECTOR: 'pen-tool', POLYGON: 'triangle', STAR: 'star',
+  BOOLEAN_OPERATION: 'git-merge', IMAGE: 'image', DEFAULT: 'box'
+};
+
+function nodeIcon(type) {
+  return NODE_ICONS[type] || NODE_ICONS.DEFAULT;
+}
+
+function mkEl(tag, cls, html) {
+  var el = document.createElement(tag);
+  if (cls) el.className = cls;
+  if (html !== undefined) el.innerHTML = html;
+  return el;
+}
+
+function icon(name, size) {
+  size = size || 13;
+  return '<i data-lucide="' + name + '" style="width:' + size + 'px;height:' + size + 'px"></i>';
+}
+
+function refreshIcons() {
+  if (window.lucide) lucide.createIcons();
+}
+
+// ── Toast ─────────────────────────────────────────────────────────────────
+function showToast(msg, type) {
+  var container = document.getElementById('toast-container');
+  var t = mkEl('div', 'toast' + (type ? ' ' + type : ''), msg);
+  container.appendChild(t);
+  setTimeout(function() { t.remove(); }, 2800);
+}
+
+// ── Scope toggle ──────────────────────────────────────────────────────────
+document.getElementById('scope-toggle').addEventListener('click', function(e) {
+  var btn = e.target.closest('.scope-btn');
+  if (!btn) return;
+  activeScope = btn.dataset.scope;
+  document.querySelectorAll('.scope-btn').forEach(function(b) {
+    b.classList.toggle('active', b.dataset.scope === activeScope);
+    b.setAttribute('aria-pressed', b.dataset.scope === activeScope ? 'true' : 'false');
+  });
+});
+
+// ── Tab switching ─────────────────────────────────────────────────────────
+document.getElementById('tab-bar').addEventListener('click', function(e) {
+  var btn = e.target.closest('.tab-btn');
+  if (!btn) return;
+  var tab = btn.dataset.tab;
+  if (tab === activeTab) return;
+  activeTab = tab;
+  document.querySelectorAll('.tab-btn').forEach(function(b) {
+    var isActive = b.dataset.tab === tab;
+    b.classList.toggle('active', isActive);
+    b.setAttribute('aria-selected', isActive ? 'true' : 'false');
+  });
+  document.querySelectorAll('.tab-panel').forEach(function(p) {
+    p.classList.toggle('active', p.id === 'panel-' + tab);
+  });
+});
+
+// ── Filter pills ──────────────────────────────────────────────────────────
+document.getElementById('filter-bar').addEventListener('click', function(e) {
+  var btn = e.target.closest('.filter-pill');
+  if (!btn) return;
+  activeFilter = btn.dataset.filter;
+  document.querySelectorAll('.filter-pill').forEach(function(p) {
+    p.classList.toggle('active', p.dataset.filter === activeFilter);
+  });
+  renderIssues();
+});
+
+// ── Scan ──────────────────────────────────────────────────────────────────
+document.getElementById('btn-scan').addEventListener('click', function() {
+  if (scanning) return;
+  runScan();
+});
+
+function runScan() {
+  scanning = true;
+  _progressPct = 0;
+  var btn = document.getElementById('btn-scan');
+  btn.disabled = true;
+  btn.innerHTML = icon('loader', 13) + ' Scanning…';
+  document.getElementById('progress-wrap').classList.add('visible');
+  document.getElementById('progress-bar-fill').style.width = '0%';
+  document.getElementById('progress-text').textContent = 'Scanning…';
+  postMsg({ type: 'scan', scope: activeScope, config: settings });
+}
+
+// ── Receive messages ──────────────────────────────────────────────────────
+window.onmessage = function(event) {
+  var msg = event.data && event.data.pluginMessage;
+  if (!msg) return;
+
+  if (msg.type === 'settings') {
+    settings = msg.settings;
+    renderSettings();
+  }
+
+  else if (msg.type === 'scan_start') {
+    scanResults = [];
+    errorNodeIds = [];
+    detailIndex = -1;
+  }
+
+  else if (msg.type === 'scan_progress') {
+    document.getElementById('progress-text').textContent = 'Scanned ' + msg.current + ' layers…';
+    _progressPct = Math.min(_progressPct + 8, 90);
+    document.getElementById('progress-bar-fill').style.width = _progressPct + '%';
+  }
+
+  else if (msg.type === 'scan_done') {
+    scanning = false;
+    var btn = document.getElementById('btn-scan');
+    btn.disabled = false;
+    btn.innerHTML = icon('play', 13) + ' Scan';
+    var pw = document.getElementById('progress-wrap');
+    pw.classList.remove('visible');
+    document.getElementById('progress-bar-fill').style.width = '100%';
+    _progressPct = 0;
+
+    scanResults = msg.results || [];
+    reportData = msg.report || null;
+    errorNodeIds = scanResults.map(function(r) { return r.nodeId; });
+
+    renderIssues();
+    renderLayers();
+    renderReport();
+    updateFilterCounts();
+    updateTabCounts();
+    refreshIcons();
+
+    var total = scanResults.reduce(function(acc, r) { return acc + r.errors.length; }, 0);
+    var summaryEl = document.getElementById('scan-summary');
+    summaryEl.classList.remove('hidden');
+    summaryEl.textContent = total + ' issue' + (total === 1 ? '' : 's') + ' in ' + scanResults.length + ' layer' + (scanResults.length === 1 ? '' : 's') + (activeScope === 'selection' ? ' (selection)' : ' (page)');
+    showToast('Scan complete — ' + total + ' issue' + (total === 1 ? '' : 's') + ' found', total === 0 ? 'success' : '');
+  }
+
+  else if (msg.type === 'scan_error') {
+    scanning = false;
+    var btn = document.getElementById('btn-scan');
+    btn.disabled = false;
+    btn.innerHTML = icon('play', 13) + ' Scan';
+    document.getElementById('progress-wrap').classList.remove('visible');
+    showToast('Scan error: ' + msg.message, 'error-toast');
+  }
+
+  else if (msg.type === 'apply_done') {
+    showToast('Fixed', 'success');
+    refreshIcons();
+  }
+
+  else if (msg.type === 'apply_error') {
+    showToast('Error: ' + msg.message, 'error-toast');
+  }
+
+  else if (msg.type === 'document_changed') {
+    if (!scanning && scanResults.length > 0) {
+      var now = Date.now();
+      if (now - _lastDocChangedToast > 5000) {
+        _lastDocChangedToast = now;
+        showToast('Document changed — click Scan to refresh', '');
+      }
+    }
+  }
+
+  else if (msg.type === 'log') addLogEntry(msg);
+};
+
+// ── Log panel ─────────────────────────────────────────────────────────────
+var logEntries = []; // { time, level, message }
+var logList = document.getElementById('log-list');
+var copyLogBtn = document.getElementById('copy-log-btn');
+var copyLogLabel = document.getElementById('copy-log-label');
+
+copyLogBtn.addEventListener('click', copyLogs);
+
+function addLogEntry(entry) {
+  logEntries.push(entry);
+  var row = document.createElement('div');
+  row.className = 'log-entry' + (entry.level === 'error' ? ' error' : '');
+  var timeSpan = document.createElement('span');
+  timeSpan.className = 'log-time';
+  timeSpan.textContent = entry.time;
+  row.appendChild(timeSpan);
+  row.appendChild(document.createTextNode(entry.message));
+  if (logList.querySelector('.log-empty')) logList.innerHTML = '';
+  logList.appendChild(row);
+  logList.scrollTop = logList.scrollHeight;
+}
+
+function copyLogs() {
+  var text = logEntries.length
+    ? logEntries.map(function(e) { return '[' + e.time + '] ' + (e.level === 'error' ? 'ERROR: ' : '') + e.message; }).join('\n')
+    : 'No actions yet.';
+  var ta = document.createElement('textarea');
+  ta.value = text;
+  ta.style.position = 'fixed';
+  ta.style.opacity = '0';
+  document.body.appendChild(ta);
+  ta.focus();
+  ta.select();
+  try {
+    document.execCommand('copy');
+    copyLogLabel.textContent = 'Copied';
+    copyLogBtn.classList.add('copied');
+    setTimeout(function() { copyLogLabel.textContent = 'Copy'; copyLogBtn.classList.remove('copied'); }, 1200);
+  } catch (e) {
+    copyLogLabel.textContent = 'Failed';
+  }
+  document.body.removeChild(ta);
+}
+
+// ── Render: Issues ────────────────────────────────────────────────────────
+function getFlatErrors() {
+  var flat = [];
+  scanResults.forEach(function(r) {
+    r.errors.forEach(function(e) {
+      flat.push(e);
+    });
+  });
+  return flat;
+}
+
+function groupErrors(errors) {
+  var groups = {};
+  var order = [];
+  errors.forEach(function(e) {
+    var key = e.ruleId + '||' + e.value;
+    if (!groups[key]) {
+      groups[key] = { key: key, ruleId: e.ruleId, value: e.value, message: e.message,
+                      severity: e.severity, items: [],
+                      suggestedStyleId: e.suggestedStyleId,
+                      suggestedStyleName: e.suggestedStyleName,
+                      suggestedVariableId: e.suggestedVariableId,
+                      suggestedVariableName: e.suggestedVariableName,
+                      property: e.property };
+      order.push(key);
+    }
+    groups[key].items.push(e);
+  });
+  return order.map(function(k) { return groups[k]; });
+}
+
+function renderIssues() {
+  var list = document.getElementById('error-list');
+  var flat = getFlatErrors();
+
+  var filtered = activeFilter === 'all' ? flat : flat.filter(function(e) {
+    var filterBase = activeFilter.replace(/_missing$|_mixed$|_suggested$|_off_token$|_violation$|_layer$/, '');
+    return e.ruleId === activeFilter ||
+           e.ruleId.indexOf(filterBase) === 0;
+  });
+
+  if (filtered.length === 0) {
+    var msg = flat.length === 0
+      ? '<div class="empty-state">' + icon('scan-search', 36) + '<p class="empty-title">No scan yet</p><p class="empty-sub">Click Scan to check the current selection or page for design issues.</p></div>'
+      : '<div class="empty-state">' + icon('check-circle', 36) + '<p class="empty-title">No issues here</p><p class="empty-sub">All layers in this category look clean.</p></div>';
+    list.innerHTML = msg;
+    refreshIcons();
+    return;
+  }
+
+  var groups = groupErrors(filtered);
+  list.innerHTML = '';
+  groups.forEach(function(g) { list.appendChild(buildGroupEl(g)); });
+  refreshIcons();
+}
+
+function buildGroupEl(g) {
+  var isWarning = g.severity === 'warning';
+  var colorCls = isWarning ? 'warning-color' : 'error-color';
+  var badgeCls = isWarning ? 'warning' : 'error';
+
+  var wrap = mkEl('div', 'error-group');
+  wrap.setAttribute('role', 'listitem');
+
+  // Header
+  var hdr = mkEl('div', 'error-group-header');
+  hdr.setAttribute('aria-expanded', 'false');
+  hdr.setAttribute('tabindex', '0');
+  hdr.innerHTML =
+    '<span class="severity-dot ' + badgeCls + '"></span>' +
+    '<span class="group-icon ' + colorCls + '">' + icon(RULE_ICONS[g.ruleId] || 'alert-circle', 14) + '</span>' +
+    '<span class="group-message">' + escHtml(g.message) + '</span>' +
+    (g.suggestedVariableName
+      ? '<span class="var-badge" data-varid="' + g.suggestedVariableId + '" data-property="' + g.property + '" title="Apply variable to all in group">' +
+        icon('hexagon', 10) + ' ' + escHtml(shortVarName(g.suggestedVariableName)) + '</span>'
+      : '') +
+    '<span class="group-badge ' + badgeCls + '">' + g.items.length + '</span>' +
+    '<span class="group-chevron">' + icon('chevron-right', 13) + '</span>';
+  wrap.appendChild(hdr);
+
+  // Group actions row
+  var acts = mkEl('div', 'group-actions');
+  acts.innerHTML =
+    '<button class="btn btn-ghost" data-action="select-all" title="Select all layers in group">' + icon('mouse-pointer-2', 11) + ' Select All</button>' +
+    (g.suggestedStyleId
+      ? '<button class="btn btn-primary" data-action="apply-style-all" title="Apply style to all">' + icon('check', 11) + ' Apply Style</button>' : '') +
+    (g.suggestedVariableId
+      ? '<button class="btn" data-action="apply-var-all" title="Apply variable to all">' + icon('hexagon', 11) + ' Apply Variable</button>' : '');
+  wrap.appendChild(acts);
+
+  // Body
+  var body = mkEl('div', 'error-group-body');
+  body.setAttribute('role', 'list');
+  g.items.forEach(function(e) {
+    body.appendChild(buildLayerRowEl(e, g));
+  });
+  wrap.appendChild(body);
+
+  // Toggle
+  hdr.addEventListener('click', function() {
+    var open = wrap.classList.toggle('open');
+    hdr.setAttribute('aria-expanded', open ? 'true' : 'false');
+    refreshIcons();
+  });
+  hdr.addEventListener('keydown', function(ev) {
+    if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); hdr.click(); }
+  });
+
+  // Group actions
+  acts.addEventListener('click', function(e) {
+    var btn = e.target.closest('[data-action]');
+    if (!btn) return;
+    var action = btn.dataset.action;
+    var nodeIds = g.items.map(function(i) { return i.nodeId; });
+    if (action === 'select-all') {
+      postMsg({ type: 'select_nodes', nodeIds: nodeIds });
+    } else if (action === 'apply-style-all') {
+      nodeIds.forEach(function(id) {
+        postMsg({ type: 'apply_style', nodeId: id, styleId: g.suggestedStyleId, property: g.property });
+      });
+    } else if (action === 'apply-var-all') {
+      g.items.forEach(function(item) {
+        postMsg({ type: 'apply_variable', nodeId: item.nodeId, variableId: g.suggestedVariableId,
+                  property: g.property, fillIndex: item.fillIndex || 0 });
+      });
+    }
+  });
+
+  // Var badge in header
+  hdr.addEventListener('click', function(e) {
+    var vb = e.target.closest('.var-badge');
+    if (!vb) return;
+    e.stopPropagation();
+    g.items.forEach(function(item) {
+      postMsg({ type: 'apply_variable', nodeId: item.nodeId, variableId: vb.dataset.varid,
+                property: vb.dataset.property, fillIndex: item.fillIndex || 0 });
+    });
+  });
+
+  return wrap;
+}
+
+function buildLayerRowEl(e, g) {
+  var row = mkEl('div', 'layer-row');
+  row.setAttribute('role', 'listitem');
+
+  var canCreateStyle = STYLE_RULES.indexOf(e.ruleId) !== -1 && !e.suggestedStyleId;
+  row.innerHTML =
+    '<span class="layer-icon">' + icon(nodeIcon(e.nodeType), 12) + '</span>' +
+    '<span class="layer-name" title="' + escHtml(e.nodeName) + '">' + escHtml(e.nodeName) + '</span>' +
+    '<div class="layer-actions">' +
+    '<button class="btn btn-ghost" data-action="focus" data-nodeid="' + e.nodeId + '" aria-label="Focus layer">' + icon('crosshair', 11) + '</button>' +
+    (e.suggestedStyleId ? '<button class="btn btn-primary" data-action="apply-style" data-nodeid="' + e.nodeId + '" data-styleid="' + e.suggestedStyleId + '" data-property="' + e.property + '" aria-label="Apply style">Style</button>' : '') +
+    (e.suggestedVariableId ? '<button class="btn" data-action="apply-var" data-nodeid="' + e.nodeId + '" data-varid="' + e.suggestedVariableId + '" data-property="' + e.property + '" data-fillindex="' + (e.fillIndex || 0) + '" aria-label="Apply variable">Var</button>' : '') +
+    (canCreateStyle ? '<button class="btn btn-ghost" data-action="create-style" data-nodeid="' + e.nodeId + '" data-property="' + e.property + '" aria-label="Create style">New Style</button>' : '') +
+    (e.ruleId === 'hidden_layer'
+      ? '<button class="btn" data-action="show-layer" data-nodeid="' + e.nodeId + '" aria-label="Show layer">Show</button>' +
+        '<button class="btn btn-danger" data-action="delete-layer" data-nodeid="' + e.nodeId + '" aria-label="Delete layer">Delete</button>'
+      : '') +
+    '<button class="btn btn-ghost" data-action="detail" data-nodeid="' + e.nodeId + '" aria-label="See all issues for this layer">' + icon('arrow-right', 11) + '</button>' +
+    '</div>';
+
+  row.addEventListener('click', function(ev) {
+    var btn = ev.target.closest('[data-action]');
+    if (!btn) return;
+    var nodeId = btn.dataset.nodeid;
+    var action = btn.dataset.action;
+    if (action === 'focus') postMsg({ type: 'select_node', nodeId: nodeId });
+    else if (action === 'apply-style') postMsg({ type: 'apply_style', nodeId: nodeId, styleId: btn.dataset.styleid, property: btn.dataset.property });
+    else if (action === 'apply-var') postMsg({ type: 'apply_variable', nodeId: nodeId, variableId: btn.dataset.varid, property: btn.dataset.property, fillIndex: parseInt(btn.dataset.fillindex, 10) || 0 });
+    else if (action === 'create-style') postMsg({ type: 'create_style', nodeId: nodeId, property: btn.dataset.property });
+    else if (action === 'show-layer') postMsg({ type: 'show_node', nodeId: nodeId });
+    else if (action === 'delete-layer') {
+      if (confirm('Delete this hidden layer? This cannot be undone from within the plugin.')) {
+        postMsg({ type: 'delete_node', nodeId: nodeId });
+      }
+    }
+    else if (action === 'detail') openDetailPanel(nodeId);
+  });
+
+  return row;
+}
+
+// ── Render: Layers ────────────────────────────────────────────────────────
+function renderLayers() {
+  var list = document.getElementById('layers-list');
+  if (scanResults.length === 0) {
+    list.innerHTML = '<div class="empty-state">' + icon('layers', 36) + '<p class="empty-title">No issues found</p><p class="empty-sub">All scanned layers are clean.</p></div>';
+    refreshIcons();
+    return;
+  }
+  list.innerHTML = '';
+  scanResults.forEach(function(r) {
+    var errCount = r.errors.filter(function(e) { return e.severity === 'error'; }).length;
+    var warnCount = r.errors.filter(function(e) { return e.severity === 'warning'; }).length;
+    var row = mkEl('div', 'layer-tree-row');
+    row.dataset.nodeid = r.nodeId;
+    row.innerHTML =
+      '<span class="layer-tree-icon">' + icon(nodeIcon(r.nodeType), 13) + '</span>' +
+      '<span class="layer-tree-name" title="' + escHtml(r.nodeName) + '">' + escHtml(r.nodeName) + '</span>' +
+      '<div class="layer-tree-badges">' +
+      (errCount > 0 ? '<span class="count-badge error">' + errCount + '</span>' : '') +
+      (warnCount > 0 ? '<span class="count-badge warning">' + warnCount + '</span>' : '') +
+      '</div>';
+    row.addEventListener('click', function() {
+      postMsg({ type: 'select_node', nodeId: r.nodeId });
+      openDetailPanel(r.nodeId);
+    });
+    list.appendChild(row);
+  });
+  refreshIcons();
+}
+
+// ── Detail panel ──────────────────────────────────────────────────────────
+function openDetailPanel(nodeId) {
+  var idx = errorNodeIds.indexOf(nodeId);
+  if (idx === -1) idx = 0;
+  detailIndex = idx;
+  renderDetailPanel();
+  document.getElementById('detail-panel').classList.add('open');
+}
+
+function renderDetailPanel() {
+  var r = scanResults[detailIndex];
+  if (!r) return;
+  document.getElementById('detail-node-name').textContent = r.nodeName;
+  document.getElementById('detail-node-type').textContent = r.nodeType;
+  document.getElementById('detail-nav-label').textContent = (detailIndex + 1) + ' / ' + scanResults.length;
+  updateDetailNavButtons();
+
+  var body = document.getElementById('detail-body');
+  body.innerHTML = '';
+  r.errors.forEach(function(e) {
+    var isWarning = e.severity === 'warning';
+    var colorCls = isWarning ? 'warning-color' : 'error-color';
+    var row = mkEl('div', 'detail-error-row');
+    row.innerHTML =
+      '<div class="detail-error-header">' +
+        '<span class="severity-dot ' + (isWarning ? 'warning' : 'error') + '"></span>' +
+        '<span class="group-icon ' + colorCls + '">' + icon(RULE_ICONS[e.ruleId] || 'alert-circle', 14) + '</span>' +
+        '<span class="detail-error-message">' + escHtml(e.message) + '</span>' +
+      '</div>' +
+      '<div class="detail-actions">' +
+      '<button class="btn btn-ghost" data-action="focus" data-nodeid="' + e.nodeId + '" aria-label="Select layer">' + icon('crosshair', 11) + ' Select</button>' +
+      (e.suggestedStyleId ? '<button class="btn btn-primary" data-action="apply-style" data-nodeid="' + e.nodeId + '" data-styleid="' + e.suggestedStyleId + '" data-property="' + e.property + '">' + icon('check', 11) + ' Apply Style: ' + escHtml(e.suggestedStyleName || '') + '</button>' : '') +
+      (e.suggestedVariableId ? '<button class="btn" data-action="apply-var" data-nodeid="' + e.nodeId + '" data-varid="' + e.suggestedVariableId + '" data-property="' + e.property + '" data-fillindex="' + (e.fillIndex || 0) + '">' + icon('hexagon', 11) + ' ' + escHtml(e.suggestedVariableName || 'Apply Variable') + '</button>' : '') +
+      (STYLE_RULES.indexOf(e.ruleId) !== -1 && !e.suggestedStyleId
+        ? '<button class="btn btn-ghost" data-action="create-style" data-nodeid="' + e.nodeId + '" data-property="' + e.property + '">' + icon('plus', 11) + ' New Style</button>' : '') +
+      (e.ruleId === 'hidden_layer'
+        ? '<button class="btn" data-action="show-layer" data-nodeid="' + e.nodeId + '">Show</button><button class="btn btn-danger" data-action="delete-layer" data-nodeid="' + e.nodeId + '">Delete</button>'
+        : '') +
+      '</div>';
+
+    row.addEventListener('click', function(ev) {
+      var btn = ev.target.closest('[data-action]');
+      if (!btn) return;
+      var nodeId2 = btn.dataset.nodeid;
+      var action = btn.dataset.action;
+      if (action === 'focus') postMsg({ type: 'select_node', nodeId: nodeId2 });
+      else if (action === 'apply-style') postMsg({ type: 'apply_style', nodeId: nodeId2, styleId: btn.dataset.styleid, property: btn.dataset.property });
+      else if (action === 'apply-var') postMsg({ type: 'apply_variable', nodeId: nodeId2, variableId: btn.dataset.varid, property: btn.dataset.property, fillIndex: parseInt(btn.dataset.fillindex, 10) || 0 });
+      else if (action === 'create-style') postMsg({ type: 'create_style', nodeId: nodeId2, property: btn.dataset.property });
+      else if (action === 'show-layer') postMsg({ type: 'show_node', nodeId: nodeId2 });
+      else if (action === 'delete-layer') {
+        if (confirm('Delete this hidden layer? This cannot be undone from within the plugin.')) {
+          postMsg({ type: 'delete_node', nodeId: nodeId2 });
+        }
+      }
+    });
+    body.appendChild(row);
+  });
+  refreshIcons();
+}
+
+document.getElementById('btn-detail-close').addEventListener('click', function() {
+  document.getElementById('detail-panel').classList.remove('open');
+});
+
+document.getElementById('btn-detail-prev').addEventListener('click', function() {
+  if (detailIndex > 0) { detailIndex--; renderDetailPanel(); }
+});
+document.getElementById('btn-detail-next').addEventListener('click', function() {
+  if (detailIndex < scanResults.length - 1) { detailIndex++; renderDetailPanel(); }
+});
+
+function updateDetailNavButtons() {
+  document.getElementById('btn-detail-prev').disabled = detailIndex <= 0;
+  document.getElementById('btn-detail-next').disabled = detailIndex >= scanResults.length - 1;
+}
+
+// ── Render: Report ────────────────────────────────────────────────────────
+var RULE_DISPLAY_NAMES = {
+  fill_missing: 'Missing fill style',
+  fill_mixed: 'Mixed fills',
+  stroke_missing: 'Missing stroke style',
+  text_missing: 'Missing text style',
+  text_mixed: 'Mixed typography',
+  effect_missing: 'Missing effect style',
+  radius_off_token: 'Off-token radius',
+  spacing_off_token: 'Off-token spacing',
+  opacity_off_token: 'Off-token opacity',
+  hidden_layer: 'Hidden layer',
+  naming_violation: 'Naming violation'
+};
+
+function renderReport() {
+  var content = document.getElementById('report-content');
+  if (!reportData || scanResults.length === 0) {
+    content.innerHTML = '<div class="empty-state">' + icon('bar-chart-2', 36) + '<p class="empty-title">No report yet</p><p class="empty-sub">Run a scan to generate a usage report.</p></div>';
+    refreshIcons();
+    return;
+  }
+
+  var html = '';
+
+  // Stats bar
+  html += '<div class="stats-row">' +
+    '<div class="stat-card"><div class="stat-value">' + reportData.totalNodes + '</div><div class="stat-label">Nodes scanned</div></div>' +
+    '<div class="stat-card"><div class="stat-value error">' + reportData.errorCount + '</div><div class="stat-label">Errors</div></div>' +
+    '<div class="stat-card"><div class="stat-value warning">' + reportData.warnCount + '</div><div class="stat-label">Warnings</div></div>' +
+    '</div>';
+
+  // Rule breakdown
+  html += '<div><p class="report-section-title">Breakdown by Rule</p><div class="rule-breakdown-list">';
+  var rbd = reportData.ruleBreakdown || {};
+  var rules = Object.keys(rbd).sort(function(a, b) { return rbd[b] - rbd[a]; });
+  if (rules.length === 0) {
+    html += '<p class="report-empty-note">No issues found.</p>';
+  } else {
+    rules.forEach(function(ruleId) {
+      html += '<div class="rule-breakdown-row">' +
+        '<span class="group-icon">' + icon(RULE_ICONS[ruleId] || 'alert-circle', 13) + '</span>' +
+        '<span class="rule-breakdown-label">' + (RULE_DISPLAY_NAMES[ruleId] || ruleId) + '</span>' +
+        '<span class="rule-breakdown-count">' + rbd[ruleId] + '</span>' +
+        '</div>';
+    });
+  }
+  html += '</div></div>';
+
+  // Unused styles (when feature is enabled and data is present)
+  if (reportData.unusedPaints !== undefined) {
+    var allUnused = [].concat(
+      reportData.unusedPaints.map(function(s) { return { name: s.name, type: 'Paint' }; }),
+      reportData.unusedTexts.map(function(s) { return { name: s.name, type: 'Text' }; }),
+      reportData.unusedEffects.map(function(s) { return { name: s.name, type: 'Effect' }; })
+    );
+    html += '<div><p class="report-section-title">Unused Styles in Scope</p>';
+    if (allUnused.length === 0) {
+      html += '<p class="report-empty-note">All local styles are used within the scanned scope.</p>';
+    } else {
+      html += '<div class="rule-breakdown-list">';
+      allUnused.forEach(function(s) {
+        html += '<div class="rule-breakdown-row">' +
+          '<span class="group-icon">' + icon(s.type === 'Paint' ? 'droplets' : s.type === 'Text' ? 'type' : 'sparkles', 13) + '</span>' +
+          '<span class="rule-breakdown-label">' + escHtml(s.name) + '</span>' +
+          '<span class="rule-breakdown-count" style="color:var(--text-muted)">' + s.type + '</span>' +
+          '</div>';
+      });
+      html += '</div>';
+    }
+    html += '</div>';
+  }
+
+  // Scan duration
+  html += '<p class="scan-duration-note">Scan completed in ' + (reportData.scanDuration || 0) + ' ms</p>';
+
+  // Export
+  html += '<div class="export-row"><button class="btn" id="btn-export-json">' + icon('download', 11) + ' Copy report JSON</button></div>';
+
+  content.innerHTML = html;
+
+  var exportBtn = document.getElementById('btn-export-json');
+  if (exportBtn) {
+    exportBtn.addEventListener('click', function() {
+      var payload = JSON.stringify({ summary: reportData, issues: scanResults }, null, 2);
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(payload).then(function() {
+          showToast('Report JSON copied', 'success');
+        });
+      } else {
+        showToast('Clipboard API not available', 'error-toast');
+      }
+    });
+  }
+
+  refreshIcons();
+}
+
+// ── Render: Settings ──────────────────────────────────────────────────────
+function renderSettings() {
+  renderTagInput('radius-tags-wrap', 'radius-tag-input', settings.radiusAllowlist, 'radius');
+  renderTagInput('spacing-tags-wrap', 'spacing-tag-input', settings.spacingAllowlist, 'spacing');
+  renderTagInput('opacity-tags-wrap', 'opacity-tag-input', settings.opacityAllowlist, 'opacity');
+  document.getElementById('toggle-lint-vectors').checked = settings.lintVectors;
+  document.getElementById('toggle-warn-hidden').checked = settings.warnHidden;
+  document.getElementById('toggle-warn-naming').checked = settings.warnNaming;
+  document.getElementById('toggle-show-unused').checked = settings.showUnusedStyles;
+}
+
+function renderTagInput(wrapId, inputId, values, type) {
+  var wrap = document.getElementById(wrapId);
+  var input = document.getElementById(inputId);
+  // Remove existing tags (keep input)
+  Array.from(wrap.querySelectorAll('.token-tag')).forEach(function(t) { t.remove(); });
+  // Re-insert tags before input
+  values.forEach(function(v) {
+    var tag = mkEl('span', 'token-tag');
+    tag.innerHTML = v + '<button class="token-tag-remove" aria-label="Remove ' + v + '">×</button>';
+    tag.querySelector('.token-tag-remove').addEventListener('click', function() {
+      var arr = settings[type + 'Allowlist'] || [];
+      var idx = arr.indexOf(v);
+      if (idx !== -1) { arr.splice(idx, 1); saveSettings(); renderTagInput(wrapId, inputId, arr, type); }
+    });
+    wrap.insertBefore(tag, input);
+  });
+}
+
+function saveSettings() {
+  postMsg({ type: 'save_settings', settings: settings });
+}
+
+// Tag input: pressing Enter adds a value
+['radius', 'spacing', 'opacity'].forEach(function(type) {
+  var input = document.getElementById(type + '-tag-input');
+  input.addEventListener('keydown', function(e) {
+    if (e.key !== 'Enter') return;
+    e.preventDefault();
+    var raw = input.value.trim();
+    if (!raw) return;
+    var val = parseFloat(raw);
+    if (isNaN(val)) { showToast('Please enter a numeric value', 'error-toast'); return; }
+    var arr = settings[type + 'Allowlist'];
+    if (arr.indexOf(val) === -1) {
+      arr.push(val);
+      arr.sort(function(a, b) { return a - b; });
+      saveSettings();
+      renderTagInput(type + '-tags-wrap', type + '-tag-input', arr, type);
+    }
+    input.value = '';
+  });
+});
+
+// Reset links
+document.querySelectorAll('[data-reset]').forEach(function(btn) {
+  btn.addEventListener('click', function() {
+    var type = btn.dataset.reset;
+    var defaults = {
+      radius: [0, 2, 4, 8, 16, 24, 32, 9999],
+      spacing: [0, 2, 4, 8, 12, 16, 24, 32, 40, 48, 64],
+      opacity: [0, 0.08, 0.12, 0.16, 0.24, 0.32, 0.48, 0.64, 0.80, 0.88, 1]
+    };
+    settings[type + 'Allowlist'] = defaults[type].slice();
+    saveSettings();
+    renderTagInput(type + '-tags-wrap', type + '-tag-input', settings[type + 'Allowlist'], type);
+  });
+});
+
+// Toggle changes
+['toggle-lint-vectors', 'toggle-warn-hidden', 'toggle-warn-naming', 'toggle-show-unused'].forEach(function(id) {
+  document.getElementById(id).addEventListener('change', function(e) {
+    var map = {
+      'toggle-lint-vectors': 'lintVectors',
+      'toggle-warn-hidden': 'warnHidden',
+      'toggle-warn-naming': 'warnNaming',
+      'toggle-show-unused': 'showUnusedStyles'
+    };
+    settings[map[id]] = e.target.checked;
+    saveSettings();
+  });
+});
+
+// ── Counts ────────────────────────────────────────────────────────────────
+function updateFilterCounts() {
+  var flat = getFlatErrors();
+  var counts = { all: flat.length };
+  ['fill','stroke','text','effect','radius','spacing','opacity','hidden','naming'].forEach(function(k) {
+    counts[k] = 0;
+  });
+  flat.forEach(function(e) {
+    if (e.ruleId.indexOf('fill') === 0) counts.fill++;
+    else if (e.ruleId.indexOf('stroke') === 0) counts.stroke++;
+    else if (e.ruleId.indexOf('text') === 0) counts.text++;
+    else if (e.ruleId.indexOf('effect') === 0) counts.effect++;
+    else if (e.ruleId.indexOf('radius') === 0) counts.radius++;
+    else if (e.ruleId.indexOf('spacing') === 0) counts.spacing++;
+    else if (e.ruleId.indexOf('opacity') === 0) counts.opacity++;
+    else if (e.ruleId.indexOf('hidden') === 0) counts.hidden++;
+    else if (e.ruleId.indexOf('naming') === 0) counts.naming++;
+  });
+  var map = {
+    all: 'pill-all', fill_missing: 'pill-fill', stroke_missing: 'pill-stroke',
+    text_missing: 'pill-text', effect_missing: 'pill-effect', radius_off_token: 'pill-radius',
+    spacing_off_token: 'pill-spacing', opacity_off_token: 'pill-opacity',
+    hidden_layer: 'pill-hidden', naming_violation: 'pill-naming'
+  };
+  var keyMap = { all: 'all', fill_missing: 'fill', stroke_missing: 'stroke', text_missing: 'text',
+                 effect_missing: 'effect', radius_off_token: 'radius', spacing_off_token: 'spacing',
+                 opacity_off_token: 'opacity', hidden_layer: 'hidden', naming_violation: 'naming' };
+  Object.keys(map).forEach(function(k) {
+    var el = document.getElementById(map[k]);
+    if (el) el.textContent = counts[keyMap[k]] || 0;
+  });
+}
+
+function updateTabCounts() {
+  var flat = getFlatErrors();
+  document.getElementById('tab-count-issues').textContent = flat.length;
+  document.getElementById('tab-count-layers').textContent = scanResults.length;
+}
+
+// ── Escape HTML ───────────────────────────────────────────────────────────
+function escHtml(str) {
+  return String(str)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+
+function shortVarName(name) {
+  var parts = name.split('/');
+  return parts[parts.length - 1];
+}
+
+// ── Footer links ──────────────────────────────────────────────────────────
+document.getElementById('footer').addEventListener('click', function(e) {
+  var btn = e.target.closest('[data-url]');
+  if (!btn) return;
+  postMsg({ type: 'open_url', url: btn.dataset.url });
+});
+
+// ── Init ──────────────────────────────────────────────────────────────────
+postMsg({ type: 'load_settings' });
+refreshIcons();
+</script>
+</body>
+</html>

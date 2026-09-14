@@ -1,0 +1,990 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Instance Property Resetter</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600&family=JetBrains+Mono:wght@400&display=swap" rel="stylesheet">
+  <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.min.js"></script>
+  <style>
+    /* ── Design tokens ──
+       Aliased to Figma's own injected theme (figma.showUI({ themeColors: true })),
+       so this plugin auto-matches the user's real light/dark Figma theme. */
+    :root {
+      --color-bg:             var(--figma-color-bg, #2C2C2C);
+      --color-bg-secondary:   var(--figma-color-bg-secondary, #383838);
+      --color-border:         var(--figma-color-border, #444444);
+      --color-border-menu:    var(--figma-color-border, #383838);
+      --color-text:           var(--figma-color-text, #FFFFFF);
+      --color-text-secondary: var(--figma-color-text-secondary, rgba(255, 255, 255, 0.7));
+      --color-text-tertiary:  var(--figma-color-text-tertiary, rgba(255, 255, 255, 0.4));
+      --color-text-onbrand:   var(--figma-color-text-onbrand, #FFFFFF);
+      --color-bg-brand:       var(--figma-color-bg-brand, #0C8CE9);
+      --color-bg-hover:       var(--figma-color-bg-brand-hover, #006dcf);
+      --color-status-done:    var(--figma-color-text-success, #4ade80);
+      --color-status-error:   var(--figma-color-text-danger, #f87171);
+      --font-mono:            'JetBrains Mono', Consolas, monospace;
+
+      /* plugin/text-title/lg  — used for main header */
+      --font-title-lg-size:    17px;
+      --font-title-lg-lh:      24px;
+      --font-title-lg-ls:      -0.085px;
+
+      /* plugin/text-title/md  — used for section labels */
+      --font-title-md-size:    15px;
+      --font-title-md-lh:      22px;
+      --font-title-md-ls:      -0.0375px;
+
+      /* plugin/text-body/md  — used for prop names, chips, status, button */
+      --font-body-md-size:     15px;
+      --font-body-md-lh:       22px;
+      --font-body-md-ls:       -0.0375px;
+
+      /* plugin/text-body/sm  — used for prop descriptions, branding */
+      --font-body-sm-size:     14px;
+      --font-body-sm-lh:       20px;
+      --font-body-sm-ls:       -0.035px;
+    }
+
+    /* ── Reset ── */
+    *,
+    *::before,
+    *::after {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    html,
+    body {
+      width: 600px;
+      height: 900px;
+      overflow: hidden;
+    }
+
+    body {
+      font-family: 'Plus Jakarta Sans', system-ui, sans-serif;
+      font-size: var(--font-body-md-size);
+      font-weight: 400;
+      line-height: var(--font-body-md-lh);
+      color: var(--color-text);
+      background: var(--color-bg);
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    /* ── Divider ── */
+    .divider {
+      flex-shrink: 0;
+      width: 100%;
+      height: 1px;
+      background: var(--color-border);
+    }
+
+    /* ── Content header ── */
+    .content-header {
+      flex-shrink: 0;
+      display: flex;
+      align-items: center;
+      padding: 24px 24px 16px;
+    }
+
+    .header-group {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .header-icon {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 20px;
+      height: 20px;
+      flex-shrink: 0;
+      color: var(--color-text);
+    }
+
+    .header-title {
+      font-family: 'Plus Jakarta Sans', sans-serif;
+      font-size: var(--font-title-lg-size);
+      font-weight: 600;
+      line-height: var(--font-title-lg-lh);
+      letter-spacing: var(--font-title-lg-ls);
+      color: var(--color-text);
+      white-space: nowrap;
+    }
+
+    /* ── Section block ── */
+    .section-block {
+      flex-shrink: 0;
+      display: flex;
+      flex-direction: column;
+      gap: 20px;
+      padding: 24px 24px;
+    }
+
+    .section-header {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding-bottom: 12px;
+    }
+
+    .section-icon {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 18px;
+      height: 18px;
+      flex-shrink: 0;
+      color: var(--color-text);
+    }
+
+    .section-label {
+      font-family: 'Plus Jakarta Sans', sans-serif;
+      font-size: var(--font-title-md-size);
+      font-weight: 500;
+      line-height: var(--font-title-md-lh);
+      letter-spacing: var(--font-title-md-ls);
+      color: var(--color-text);
+      white-space: nowrap;
+    }
+
+    /* ── Chips (scope + bulk select) ── */
+    .chip-group {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .chip {
+      display: inline-flex;
+      align-items: center;
+      padding: 6px 12px;
+      background: var(--color-bg);
+      border: 2px solid var(--color-border);
+      border-radius: 5px;
+      font-family: inherit;
+      font-size: var(--font-body-md-size);
+      font-weight: 400;
+      line-height: var(--font-body-md-lh);
+      letter-spacing: var(--font-body-md-ls);
+      color: var(--color-text);
+      cursor: pointer;
+      white-space: nowrap;
+      -webkit-user-select: none;
+      user-select: none;
+      transition: border-color 0.1s;
+    }
+
+    .chip:hover:not(.chip--active) {
+      border-color: #555555;
+    }
+
+    .chip--active {
+      background: var(--color-bg-brand);
+      border-color: transparent;
+      color: var(--color-text-onbrand);
+    }
+
+    /* Extra breathing room between bulk-select chips and the rows below */
+    .chip-group + .checkbox-rows { margin-top: 8px; }
+
+    /* ── Checkbox rows ── */
+    .checkbox-rows {
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+
+    .checkbox-rows--lg {
+      gap: 20px;
+    }
+
+    .checkbox-row,
+    .sub-row {
+      display: flex;
+      align-items: flex-start;
+      gap: 12px;
+      cursor: pointer;
+      -webkit-user-select: none;
+      user-select: none;
+    }
+
+    .sub-row {
+      padding-left: 24px;
+    }
+
+    .cb-box {
+      flex-shrink: 0;
+      width: 22px;
+      height: 22px;
+      background: #1e1e1e;
+      border: 2px solid #383838;
+      border-radius: 3px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: background 0.15s, border-color 0.15s;
+    }
+
+    .checkbox-row.is-checked .cb-box,
+    .sub-row.is-checked .cb-box {
+      background: var(--color-bg-brand);
+      border-color: var(--color-bg-brand);
+    }
+
+    .cb-check {
+      display: none;
+      width: 10px;
+      height: 10px;
+      color: #fff;
+    }
+
+    .checkbox-row.is-checked .cb-check,
+    .sub-row.is-checked .cb-check {
+      display: block;
+    }
+
+    .text-group {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      flex: 1;
+      min-width: 0;
+    }
+
+    .prop-name {
+      font-size: var(--font-body-md-size);
+      font-weight: 400;
+      line-height: var(--font-body-md-lh);
+      letter-spacing: var(--font-body-md-ls);
+      color: var(--color-text);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .prop-desc {
+      font-size: var(--font-body-sm-size);
+      font-weight: 400;
+      line-height: var(--font-body-sm-lh);
+      letter-spacing: var(--font-body-sm-ls);
+      color: var(--color-text-secondary);
+      display: -webkit-box;
+      -webkit-line-clamp: 2;
+      -webkit-box-orient: vertical;
+      overflow: hidden;
+    }
+
+    /* ── Width filter sub-rows ── */
+    .sub-rows {
+      display: none;
+      flex-direction: column;
+      gap: 14px;
+    }
+
+    .sub-rows.is-visible {
+      display: flex;
+    }
+
+    /* ── Width filter inputs ── */
+    .input-row {
+      display: none;
+      align-items: center;
+      gap: 16px;
+      padding-left: 24px;
+    }
+
+    .input-row.is-visible {
+      display: flex;
+    }
+
+    .num-input-wrap {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 4px 8px;
+      background: var(--color-bg-secondary);
+      border: 2px solid var(--color-border);
+      border-radius: 5px;
+    }
+
+    .num-input {
+      width: 36px;
+      background: transparent;
+      border: none;
+      outline: none;
+      font-family: inherit;
+      font-size: var(--font-body-md-size);
+      font-weight: 400;
+      line-height: var(--font-body-md-lh);
+      letter-spacing: var(--font-body-md-ls);
+      color: var(--color-text);
+      -moz-appearance: textfield;
+      appearance: textfield;
+    }
+
+    .num-input::-webkit-outer-spin-button,
+    .num-input::-webkit-inner-spin-button {
+      -webkit-appearance: none;
+      margin: 0;
+    }
+
+    .num-unit {
+      font-size: var(--font-body-sm-size);
+      line-height: var(--font-body-sm-lh);
+      letter-spacing: var(--font-body-sm-ls);
+      color: var(--color-text-secondary);
+      white-space: nowrap;
+    }
+
+    .input-sep {
+      flex-shrink: 0;
+      width: 10px;
+      height: 1px;
+      background: var(--color-border);
+    }
+
+    /* ── Scrollable body ── */
+    .scroll-body {
+      flex: 1;
+      min-height: 0;
+      overflow-x: hidden;
+      overflow-y: auto;
+      scrollbar-width: none;
+    }
+
+    .scroll-body::-webkit-scrollbar {
+      display: none;
+    }
+
+    /* ── Footer ── */
+    .footer {
+      flex-shrink: 0;
+      background: #1e1e1e;
+    }
+
+    .footer-actions {
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+      padding: 24px 24px;
+    }
+
+    .status-text {
+      font-size: var(--font-body-md-size);
+      font-weight: 400;
+      line-height: var(--font-body-md-lh);
+      letter-spacing: var(--font-body-md-ls);
+      color: var(--color-text-secondary);
+      white-space: nowrap;
+    }
+
+    .status-text.is-running { color: rgba(255, 255, 255, 0.85); }
+    .status-text.is-done    { color: var(--color-status-done); }
+    .status-text.is-error   { color: var(--color-status-error); }
+
+    .run-btn {
+      width: 100%;
+      padding: 12px 0;
+      background: var(--color-bg-brand);
+      color: var(--color-text-onbrand);
+      border: none;
+      border-radius: 5px;
+      font-family: inherit;
+      font-size: var(--font-body-md-size);
+      font-weight: 400;
+      line-height: var(--font-body-md-lh);
+      letter-spacing: var(--font-body-md-ls);
+      cursor: pointer;
+      transition: background 0.15s;
+    }
+
+    .run-btn:hover:not(:disabled) {
+      background: var(--color-bg-hover);
+    }
+
+    .run-btn:disabled {
+      background: #383838;
+      color: rgba(255, 255, 255, 0.3);
+      cursor: not-allowed;
+    }
+
+    /* ── Log panel ── */
+    .log-section { padding: 12px 24px; display: flex; flex-direction: column; gap: 8px; flex-shrink: 0; border-top: 1px solid var(--color-border); }
+    .log-header { display: flex; align-items: center; justify-content: space-between; }
+    .copy-log-btn {
+      display: flex; align-items: center; gap: 5px;
+      background: transparent; border: 1px solid var(--color-border); border-radius: 5px;
+      color: var(--color-text-secondary); font-size: var(--font-body-sm-size); font-family: inherit;
+      padding: 4px 8px; cursor: pointer; transition: background 0.1s, color 0.1s;
+    }
+    .copy-log-btn:hover { background: var(--color-bg-secondary); color: var(--color-text); }
+    .copy-log-btn.copied { color: var(--color-bg-brand); border-color: var(--color-bg-brand); }
+    .log-list {
+      max-height: 100px; overflow-y: auto;
+      background: var(--color-bg-secondary); border: 1px solid var(--color-border); border-radius: 6px;
+      padding: 8px 10px;
+      font-family: var(--font-mono);
+      font-size: 12px; line-height: 18px;
+    }
+    .log-empty { color: var(--color-text-secondary); }
+    .log-entry { color: var(--color-text-secondary); white-space: pre-wrap; word-break: break-word; }
+    .log-entry.error { color: var(--color-status-error); }
+    .log-entry .log-time { color: var(--color-text-tertiary); margin-right: 6px; }
+
+    .footer-branding {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 0 24px 16px;
+    }
+
+    .brand-name {
+      font-size: var(--font-body-sm-size);
+      font-weight: 400;
+      line-height: var(--font-body-sm-lh);
+      letter-spacing: var(--font-body-sm-ls);
+      color: var(--color-text);
+      white-space: nowrap;
+    }
+
+    .brand-dot {
+      flex-shrink: 0;
+      width: 3px;
+      height: 3px;
+      border-radius: 50%;
+      background: var(--color-text-secondary);
+    }
+
+    .brand-link {
+      font-family: inherit;
+      font-size: var(--font-body-sm-size);
+      font-weight: 400;
+      line-height: var(--font-body-sm-lh);
+      letter-spacing: var(--font-body-sm-ls);
+      color: var(--color-text-secondary);
+      white-space: nowrap;
+      background: none;
+      border: none;
+      padding: 0;
+      cursor: pointer;
+      transition: color 0.15s;
+    }
+
+    .brand-link:hover {
+      color: var(--color-text);
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Content header -->
+  <header class="content-header">
+    <div class="header-group">
+      <span class="header-icon" aria-hidden="true">
+        <i data-lucide="settings" width="20" height="20"></i>
+      </span>
+      <span class="header-title">Instance Property Resetter</span>
+    </div>
+  </header>
+
+  <div class="divider"></div>
+
+  <!-- Scope -->
+  <div class="section-block">
+    <div class="section-header">
+      <span class="section-icon" aria-hidden="true">
+        <i data-lucide="layout-grid" width="18" height="18"></i>
+      </span>
+      <span class="section-label">SCOPE</span>
+    </div>
+    <div class="chip-group" role="group" aria-label="Scope">
+      <button type="button" class="chip chip--active" id="tabPage">This Page</button>
+      <button type="button" class="chip" id="tabAll">All Pages</button>
+      <button type="button" class="chip" id="tabSelection">Selection</button>
+    </div>
+  </div>
+
+  <div class="divider"></div>
+
+  <!-- Scrollable body: Width Filter, Instance, Text Layers, Layer Names -->
+  <div class="scroll-body">
+
+    <!-- Width Filter -->
+    <div class="section-block">
+      <div class="section-header">
+        <span class="section-icon" aria-hidden="true">
+          <i data-lucide="sliders-horizontal" width="18" height="18"></i>
+        </span>
+        <span class="section-label">WIDTH FILTER</span>
+      </div>
+      <div class="checkbox-rows checkbox-rows--lg">
+        <div class="checkbox-row" id="widthFilterItem" role="checkbox" aria-checked="false" tabindex="0">
+          <div class="cb-box" aria-hidden="true">
+            <i data-lucide="check" class="cb-check" width="10" height="10" stroke-width="3"></i>
+          </div>
+          <div class="text-group">
+            <span class="prop-name">Filter by width</span>
+            <span class="prop-desc">Skip instances outside this width range</span>
+          </div>
+        </div>
+        <div class="input-row" id="widthRange" aria-hidden="true">
+          <div class="num-input-wrap">
+            <input class="num-input" type="number" id="minWidth" value="0" min="0" placeholder="0" aria-label="Minimum width">
+            <span class="num-unit">px</span>
+          </div>
+          <div class="input-sep" aria-hidden="true"></div>
+          <div class="num-input-wrap">
+            <input class="num-input" type="number" id="maxWidth" min="0" placeholder="∞" aria-label="Maximum width">
+            <span class="num-unit">px</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="divider"></div>
+
+    <!-- Instance -->
+    <div class="section-block">
+      <div class="section-header">
+        <span class="section-icon" aria-hidden="true">
+          <i data-lucide="component" width="18" height="18"></i>
+        </span>
+        <span class="section-label">INSTANCE</span>
+      </div>
+      <div class="chip-group">
+        <button type="button" class="chip" id="selectAllBtn">Select all</button>
+        <button type="button" class="chip" id="deselectAllBtn">Deselect all</button>
+      </div>
+      <div class="checkbox-rows">
+        <div class="checkbox-row" data-prop="size" role="checkbox" aria-checked="false" tabindex="0">
+          <div class="cb-box" aria-hidden="true"><i data-lucide="check" class="cb-check" width="10" height="10" stroke-width="3"></i></div>
+          <div class="text-group">
+            <span class="prop-name">Size</span>
+            <span class="prop-desc">Resets width and height to match the master component</span>
+          </div>
+        </div>
+        <div class="checkbox-row" data-prop="fills" role="checkbox" aria-checked="false" tabindex="0">
+          <div class="cb-box" aria-hidden="true"><i data-lucide="check" class="cb-check" width="10" height="10" stroke-width="3"></i></div>
+          <div class="text-group">
+            <span class="prop-name">Fill</span>
+            <span class="prop-desc">Resets fills on each layer to match the master component</span>
+          </div>
+        </div>
+        <div class="checkbox-row" data-prop="strokes" role="checkbox" aria-checked="false" tabindex="0">
+          <div class="cb-box" aria-hidden="true"><i data-lucide="check" class="cb-check" width="10" height="10" stroke-width="3"></i></div>
+          <div class="text-group">
+            <span class="prop-name">Stroke</span>
+            <span class="prop-desc">Resets strokes on each layer to match the master component</span>
+          </div>
+        </div>
+        <div class="checkbox-row" data-prop="cornerRadius" role="checkbox" aria-checked="false" tabindex="0">
+          <div class="cb-box" aria-hidden="true"><i data-lucide="check" class="cb-check" width="10" height="10" stroke-width="3"></i></div>
+          <div class="text-group">
+            <span class="prop-name">Corner Radius</span>
+            <span class="prop-desc">Resets corner rounding — uniform or individual per corner</span>
+          </div>
+        </div>
+        <div class="checkbox-row" data-prop="effects" role="checkbox" aria-checked="false" tabindex="0">
+          <div class="cb-box" aria-hidden="true"><i data-lucide="check" class="cb-check" width="10" height="10" stroke-width="3"></i></div>
+          <div class="text-group">
+            <span class="prop-name">Effects</span>
+            <span class="prop-desc">Resets drop shadows, inner shadows, and blurs throughout</span>
+          </div>
+        </div>
+        <div class="checkbox-row" data-prop="opacity" role="checkbox" aria-checked="false" tabindex="0">
+          <div class="cb-box" aria-hidden="true"><i data-lucide="check" class="cb-check" width="10" height="10" stroke-width="3"></i></div>
+          <div class="text-group">
+            <span class="prop-name">Opacity</span>
+            <span class="prop-desc">Resets the opacity value on every layer inside</span>
+          </div>
+        </div>
+        <div class="checkbox-row" data-prop="clipsContent" role="checkbox" aria-checked="false" tabindex="0">
+          <div class="cb-box" aria-hidden="true"><i data-lucide="check" class="cb-check" width="10" height="10" stroke-width="3"></i></div>
+          <div class="text-group">
+            <span class="prop-name">Clip Content</span>
+            <span class="prop-desc">Resets the clip content state to match the master component</span>
+          </div>
+        </div>
+        <div class="checkbox-row" data-prop="autoLayout" role="checkbox" aria-checked="false" tabindex="0">
+          <div class="cb-box" aria-hidden="true"><i data-lucide="check" class="cb-check" width="10" height="10" stroke-width="3"></i></div>
+          <div class="text-group">
+            <span class="prop-name">Auto Layout</span>
+            <span class="prop-desc">Resets direction, alignment, sizing modes, and wrapping</span>
+          </div>
+        </div>
+        <div class="checkbox-row" data-prop="padding" role="checkbox" aria-checked="false" tabindex="0">
+          <div class="cb-box" aria-hidden="true"><i data-lucide="check" class="cb-check" width="10" height="10" stroke-width="3"></i></div>
+          <div class="text-group">
+            <span class="prop-name">Padding</span>
+            <span class="prop-desc">Resets horizontal and vertical padding values</span>
+          </div>
+        </div>
+        <div class="checkbox-row" data-prop="spacing" role="checkbox" aria-checked="false" tabindex="0">
+          <div class="cb-box" aria-hidden="true"><i data-lucide="check" class="cb-check" width="10" height="10" stroke-width="3"></i></div>
+          <div class="text-group">
+            <span class="prop-name">Spacing</span>
+            <span class="prop-desc">Resets space between items and cross-axis spacing</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="divider"></div>
+
+    <!-- Text Layers -->
+    <div class="section-block">
+      <div class="section-header">
+        <span class="section-icon" aria-hidden="true">
+          <i data-lucide="type" width="18" height="18"></i>
+        </span>
+        <span class="section-label">TEXT LAYERS</span>
+      </div>
+      <div class="checkbox-rows">
+        <div class="checkbox-row" data-prop="textStyle" role="checkbox" aria-checked="false" tabindex="0">
+          <div class="cb-box" aria-hidden="true"><i data-lucide="check" class="cb-check" width="10" height="10" stroke-width="3"></i></div>
+          <div class="text-group">
+            <span class="prop-name">Text Style</span>
+            <span class="prop-desc">Resets font, size, weight, line height, and spacing</span>
+          </div>
+        </div>
+        <div class="checkbox-row" data-prop="textFill" role="checkbox" aria-checked="false" tabindex="0">
+          <div class="cb-box" aria-hidden="true"><i data-lucide="check" class="cb-check" width="10" height="10" stroke-width="3"></i></div>
+          <div class="text-group">
+            <span class="prop-name">Text Fill</span>
+            <span class="prop-desc">Resets text color to the master component's value</span>
+          </div>
+        </div>
+        <div class="checkbox-row" data-prop="textStroke" role="checkbox" aria-checked="false" tabindex="0">
+          <div class="cb-box" aria-hidden="true"><i data-lucide="check" class="cb-check" width="10" height="10" stroke-width="3"></i></div>
+          <div class="text-group">
+            <span class="prop-name">Text Stroke</span>
+            <span class="prop-desc">Resets text stroke color and weight</span>
+          </div>
+        </div>
+        <div class="checkbox-row" data-prop="textContent" role="checkbox" aria-checked="false" tabindex="0">
+          <div class="cb-box" aria-hidden="true"><i data-lucide="check" class="cb-check" width="10" height="10" stroke-width="3"></i></div>
+          <div class="text-group">
+            <span class="prop-name">Text Content</span>
+            <span class="prop-desc">Replaces text characters with the master component's copy</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="divider"></div>
+
+    <!-- Layer Names -->
+    <div class="section-block">
+      <div class="section-header">
+        <span class="section-icon" aria-hidden="true">
+          <i data-lucide="link" width="18" height="18"></i>
+        </span>
+        <span class="section-label">LAYER NAMES</span>
+      </div>
+      <div class="checkbox-rows">
+        <div class="checkbox-row" data-prop="layerName" id="layerNameItem" role="checkbox" aria-checked="false" tabindex="0">
+          <div class="cb-box" aria-hidden="true"><i data-lucide="check" class="cb-check" width="10" height="10" stroke-width="3"></i></div>
+          <div class="text-group">
+            <span class="prop-name">Layer Name</span>
+            <span class="prop-desc">Renames each layer to its node type — Frame, Text, Rectangle, Ellipse…</span>
+          </div>
+        </div>
+        <div class="sub-rows" id="layerNameSubs">
+          <div class="sub-row" id="subIncludeComponents" role="checkbox" aria-checked="false" tabindex="0">
+            <div class="cb-box" aria-hidden="true"><i data-lucide="check" class="cb-check" width="10" height="10" stroke-width="3"></i></div>
+            <div class="text-group">
+              <span class="prop-name">Include master components</span>
+              <span class="prop-desc">Apply renaming to components themselves</span>
+            </div>
+          </div>
+          <div class="sub-row" id="subIncludeInstances" role="checkbox" aria-checked="false" tabindex="0">
+            <div class="cb-box" aria-hidden="true"><i data-lucide="check" class="cb-check" width="10" height="10" stroke-width="3"></i></div>
+            <div class="text-group">
+              <span class="prop-name">Include instances</span>
+              <span class="prop-desc">Apply renaming to nested instance layers</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </div><!-- /.scroll-body -->
+
+  <div class="divider"></div>
+
+  <!-- Log -->
+  <div class="log-section">
+    <div class="log-header">
+      <span class="section-label">Log</span>
+      <button type="button" class="copy-log-btn" id="copyLogBtn">
+        <svg width="12" height="12" viewBox="0 0 12 12" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <rect x="4" y="4" width="7" height="7" rx="1" stroke="currentColor" stroke-width="1.1"/>
+          <path d="M2.5 8V2.5C2.5 1.94772 2.94772 1.5 3.5 1.5H8" stroke="currentColor" stroke-width="1.1"/>
+        </svg>
+        <span id="copyLogLabel">Copy</span>
+      </button>
+    </div>
+    <div class="log-list" id="logList">
+      <div class="log-empty">No actions yet.</div>
+    </div>
+  </div>
+
+  <div class="divider"></div>
+
+  <!-- Footer -->
+  <footer class="footer">
+    <div class="footer-actions">
+      <span class="status-text" id="statusText" role="status" aria-live="polite">
+        ⚠ Select scope and properties, then run.
+      </span>
+      <button type="button" class="run-btn" id="runBtn">Run Reset</button>
+    </div>
+    <div class="footer-branding">
+      <span class="brand-name">Property Resetter</span>
+      <span class="brand-dot" aria-hidden="true"></span>
+      <span class="brand-name" style="color: var(--color-text-secondary); font-weight: 400;">v1.0</span>
+      <span class="brand-dot" aria-hidden="true"></span>
+      <button type="button" class="brand-link" id="xLink">x.com/danielfransix</button>
+      <span class="brand-dot" aria-hidden="true"></span>
+      <button type="button" class="brand-link" id="coffeeLink">☕ Buy me a coffee</button>
+    </div>
+  </footer>
+
+  <script>
+    var scope = 'page';
+    var running = false;
+
+    var scopeMap = { tabPage: 'page', tabAll: 'all', tabSelection: 'selection' };
+
+    // Scope chips
+    document.querySelectorAll('#tabPage, #tabAll, #tabSelection').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        if (running) return;
+        scope = scopeMap[btn.id] || 'page';
+        document.querySelectorAll('#tabPage, #tabAll, #tabSelection').forEach(function (b) {
+          b.classList.remove('chip--active');
+        });
+        btn.classList.add('chip--active');
+      });
+    });
+
+    // Toggle helper
+    function toggleCheck(el) {
+      var checked = el.classList.toggle('is-checked');
+      el.setAttribute('aria-checked', String(checked));
+    }
+
+    // Checkbox rows
+    document.querySelectorAll('.checkbox-row').forEach(function (row) {
+      function handleToggle() {
+        if (running) return;
+        toggleCheck(row);
+
+        if (row.id === 'layerNameItem') {
+          var subs = document.getElementById('layerNameSubs');
+          var show = row.classList.contains('is-checked');
+          subs.classList.toggle('is-visible', show);
+        }
+
+        if (row.id === 'widthFilterItem') {
+          var wr = document.getElementById('widthRange');
+          var show = row.classList.contains('is-checked');
+          wr.classList.toggle('is-visible', show);
+          wr.setAttribute('aria-hidden', String(!show));
+        }
+      }
+
+      row.addEventListener('click', handleToggle);
+      row.addEventListener('keydown', function (e) {
+        if (e.key === ' ' || e.key === 'Enter') { e.preventDefault(); handleToggle(); }
+      });
+    });
+
+    // Sub-rows
+    document.querySelectorAll('.sub-row').forEach(function (row) {
+      function handleToggle(e) {
+        if (running) return;
+        e.stopPropagation();
+        toggleCheck(row);
+      }
+      row.addEventListener('click', handleToggle);
+      row.addEventListener('keydown', function (e) {
+        if (e.key === ' ' || e.key === 'Enter') { e.preventDefault(); handleToggle(e); }
+      });
+    });
+
+    // Select all
+    document.getElementById('selectAllBtn').addEventListener('click', function () {
+      if (running) return;
+      document.querySelectorAll('.checkbox-row:not(#widthFilterItem)').forEach(function (row) {
+        row.classList.add('is-checked');
+        row.setAttribute('aria-checked', 'true');
+      });
+      var subs = document.getElementById('layerNameSubs');
+      subs.classList.add('is-visible');
+    });
+
+    // Deselect all
+    document.getElementById('deselectAllBtn').addEventListener('click', function () {
+      if (running) return;
+      document.querySelectorAll('.checkbox-row:not(#widthFilterItem)').forEach(function (row) {
+        row.classList.remove('is-checked');
+        row.setAttribute('aria-checked', 'false');
+      });
+      document.querySelectorAll('.sub-row').forEach(function (row) {
+        row.classList.remove('is-checked');
+        row.setAttribute('aria-checked', 'false');
+      });
+      document.getElementById('layerNameSubs').classList.remove('is-visible');
+    });
+
+    // Run
+    document.getElementById('runBtn').addEventListener('click', function () {
+      if (running) return;
+
+      var properties = {};
+      document.querySelectorAll('.checkbox-row.is-checked').forEach(function (row) {
+        if (row.dataset.prop) properties[row.dataset.prop] = true;
+      });
+
+      if (properties.layerName) {
+        properties.layerNameIncludeComponents = document.getElementById('subIncludeComponents').classList.contains('is-checked');
+        properties.layerNameIncludeInstances  = document.getElementById('subIncludeInstances').classList.contains('is-checked');
+      }
+
+      if (!Object.keys(properties).length) {
+        setStatus('error', '⚠ Select at least one property to reset.');
+        return;
+      }
+
+      if (scope === 'all' && properties.textContent) {
+        if (!confirm('This will replace text characters in all instances across every page. Continue?')) return;
+      }
+
+      running = true;
+      document.getElementById('runBtn').disabled = true;
+      setStatus('running', scope === 'selection' ? '↻ Scanning selection…' : '↻ Scanning page…');
+
+      var minVal = parseFloat(document.getElementById('minWidth').value);
+      var maxVal = parseFloat(document.getElementById('maxWidth').value);
+
+      parent.postMessage({
+        pluginMessage: {
+          type: 'run',
+          scope: scope,
+          properties: properties,
+          widthFilter: {
+            enabled: document.getElementById('widthFilterItem').classList.contains('is-checked'),
+            min: isNaN(minVal) ? 0 : Math.max(0, minVal),
+            max: isNaN(maxVal) ? null : Math.max(0, maxVal),
+          },
+        },
+      }, '*');
+    });
+
+    function setStatus(state, text) {
+      var label = document.getElementById('statusText');
+      label.className = 'status-text' + (state ? ' is-' + state : '');
+      label.textContent = text;
+    }
+
+    window.onmessage = function (event) {
+      var msg = event.data && event.data.pluginMessage;
+      if (!msg) return;
+
+      if (msg.type === 'progress') {
+        setStatus('running', '↻ ' + msg.page + ' · ' + msg.current + ' / ' + msg.total);
+      }
+
+      if (msg.type === 'done') {
+        running = false;
+        document.getElementById('runBtn').disabled = false;
+
+        var parts = [];
+        if (msg.count   > 0) parts.push(msg.count   + ' instance' + (msg.count   !== 1 ? 's' : '') + ' reset');
+        if (msg.renamed > 0) parts.push(msg.renamed + ' layer'    + (msg.renamed !== 1 ? 's' : '') + ' renamed');
+
+        var detail = '';
+        if (msg.scope === 'selection') {
+          detail = ' in selection';
+        } else if (msg.pages > 1) {
+          detail = ' across ' + msg.pages + ' page' + (msg.pages !== 1 ? 's' : '');
+        }
+
+        var skipped = msg.skipped > 0 ? ' · ' + msg.skipped + ' skipped' : '';
+        var summary = parts.length ? parts.join(' · ') : 'Nothing changed';
+        setStatus('done', '✓ Done · ' + summary + detail + skipped);
+      }
+
+      if (msg.type === 'error') {
+        running = false;
+        document.getElementById('runBtn').disabled = false;
+        setStatus('error', '⚠ ' + (msg.message || 'Something went wrong.'));
+      }
+
+      if (msg.type === 'log') addLogEntry(msg);
+    };
+
+    // ── Log panel ────────────────────────────────────────────────────────────
+    var logEntries = []; // { time, level, message }
+    var logList = document.getElementById('logList');
+    var copyLogBtn = document.getElementById('copyLogBtn');
+    var copyLogLabel = document.getElementById('copyLogLabel');
+
+    copyLogBtn.addEventListener('click', copyLogs);
+
+    function addLogEntry(entry) {
+      logEntries.push(entry);
+      var row = document.createElement('div');
+      row.className = 'log-entry' + (entry.level === 'error' ? ' error' : '');
+      var timeSpan = document.createElement('span');
+      timeSpan.className = 'log-time';
+      timeSpan.textContent = entry.time;
+      row.appendChild(timeSpan);
+      row.appendChild(document.createTextNode(entry.message));
+      if (logList.querySelector('.log-empty')) logList.innerHTML = '';
+      logList.appendChild(row);
+      logList.scrollTop = logList.scrollHeight;
+    }
+
+    function copyLogs() {
+      var text = logEntries.length
+        ? logEntries.map(function (e) { return '[' + e.time + '] ' + (e.level === 'error' ? 'ERROR: ' : '') + e.message; }).join('\n')
+        : 'No actions yet.';
+      var ta = document.createElement('textarea');
+      ta.value = text;
+      ta.style.position = 'fixed';
+      ta.style.opacity = '0';
+      document.body.appendChild(ta);
+      ta.focus();
+      ta.select();
+      try {
+        document.execCommand('copy');
+        copyLogLabel.textContent = 'Copied';
+        copyLogBtn.classList.add('copied');
+        setTimeout(function () { copyLogLabel.textContent = 'Copy'; copyLogBtn.classList.remove('copied'); }, 1200);
+      } catch (e) {
+        copyLogLabel.textContent = 'Failed';
+      }
+      document.body.removeChild(ta);
+    }
+
+    document.getElementById('xLink').addEventListener('click', function () {
+      parent.postMessage({ pluginMessage: { type: 'open_url', url: 'https://x.com/danielfransix' } }, '*');
+    });
+
+    document.getElementById('coffeeLink').addEventListener('click', function () {
+      parent.postMessage({ pluginMessage: { type: 'open_url', url: 'https://danielfransix.short.gy/buy-coffee' } }, '*');
+    });
+
+    if (window.lucide) lucide.createIcons();
+  </script>
+</body>
+</html>
