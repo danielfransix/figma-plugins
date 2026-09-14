@@ -3,10 +3,26 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Figma Connector</title>
+<title>Figma Arrow Manager</title>
+<script>
+  try {
+    window.localStorage.getItem('x')
+  } catch (e) {
+    const store = new Map()
+    const shim = {
+      getItem: (k) => (store.has(k) ? store.get(k) : null),
+      setItem: (k, v) => { store.set(k, String(v)) },
+      removeItem: (k) => { store.delete(k) },
+      clear: () => { store.clear() },
+      key: (i) => Array.from(store.keys())[i] ?? null,
+      get length() { return store.size },
+    }
+    Object.defineProperty(window, 'localStorage', { value: shim, configurable: true })
+  }
+</script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600&family=JetBrains+Mono:wght@400&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400&display=swap" rel="stylesheet">
 <style>
 :root {
   /* Sourced from Figma's own injected theme (figma.showUI({ themeColors: true })),
@@ -59,20 +75,9 @@ html, body {
   line-height: var(--font-title-lh);
 }
 
-.step { display: flex; flex-direction: column; padding: 10px 16px 12px; gap: 8px; }
+.section { display: flex; flex-direction: column; padding: 10px 16px 12px; gap: 8px; }
 
-.tip {
-  padding: 8px 10px;
-  background: var(--color-bg-secondary);
-  border-radius: 6px;
-  border: 1px solid var(--color-border);
-  font-size: var(--font-body-size);
-  color: var(--color-text-secondary);
-  line-height: var(--font-body-lh);
-}
-.tip b { color: var(--color-text); font-weight: 500; }
-
-.instructions {
+.helper {
   font-size: var(--font-body-size);
   color: var(--color-text-secondary);
   line-height: var(--font-body-lh);
@@ -91,7 +96,7 @@ html, body {
 .status-box.ready { color: var(--color-text); }
 .status-box.warn { color: var(--color-danger); }
 
-.primary-btn {
+.btn-primary {
   background: var(--color-bg-brand);
   border: none;
   border-radius: 6px;
@@ -103,10 +108,11 @@ html, body {
   cursor: pointer;
   transition: background 0.1s, opacity 0.1s;
 }
-.primary-btn:hover:not(:disabled) { background: var(--color-bg-brand-hover); }
-.primary-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+.btn-primary:hover:not(:disabled) { background: var(--color-bg-brand-hover); }
+.btn-primary:disabled { opacity: 0.4; cursor: not-allowed; }
+.btn-primary.full-width { width: 100%; }
 
-.secondary-btn {
+.btn-secondary {
   background: transparent;
   border: 1px solid var(--color-border);
   border-radius: 6px;
@@ -116,22 +122,16 @@ html, body {
   padding: 7px 12px;
   cursor: pointer;
   transition: background 0.1s, border-color 0.1s;
+  white-space: nowrap;
 }
-.secondary-btn:hover { background: var(--color-bg-secondary); border-color: var(--color-border-strong); }
-.secondary-btn.full-width { width: 100%; }
+.btn-secondary:hover { background: var(--color-bg-secondary); border-color: var(--color-border-strong); }
+.btn-secondary.full-width { width: 100%; }
 
 .divider { height: 1px; background: var(--color-border); margin: 0 16px; }
 
-.section-label {
-  font-size: var(--font-body-size);
-  color: var(--color-text-secondary);
-  font-weight: 500;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-}
-
-.row-between { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
-.row-between > span:first-child { color: var(--color-text-secondary); }
+.row-2col { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.row-2col > label { color: var(--color-text-secondary); flex: 1; min-width: 0; }
+.row-2col > .control { flex-shrink: 0; }
 
 /* ── Toggle switch ── */
 .switch { position: relative; display: inline-block; width: 28px; height: 16px; flex-shrink: 0; }
@@ -141,8 +141,7 @@ html, body {
 .switch input:checked + .switch-track { background: var(--color-bg-brand); }
 .switch input:checked + .switch-track .switch-thumb { transform: translateX(12px); }
 
-/* ── Style row: color + weight + apply ── */
-.style-row { display: flex; align-items: center; gap: 8px; }
+/* ── Color input ── */
 .color-input {
   width: 24px;
   height: 24px;
@@ -151,45 +150,16 @@ html, body {
   border-radius: 4px;
   background: none;
   cursor: pointer;
-  flex-shrink: 0;
 }
+
+/* ── Weight slider ── */
+.weight-control { display: flex; align-items: center; gap: 8px; width: 130px; }
 .weight-slider { flex: 1; accent-color: var(--color-bg-brand); cursor: pointer; }
 .weight-value { width: 20px; color: var(--color-text-secondary); text-align: right; flex-shrink: 0; }
 
 /* ── Log panel ── */
-.log-section {
-  border-top: 1px solid var(--color-border);
-  padding: 10px 16px 12px;
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  flex-shrink: 0;
-}
-.log-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-}
-.copy-btn {
-  display: flex;
-  align-items: center;
-  gap: 5px;
-  background: transparent;
-  border: 1px solid var(--color-border);
-  border-radius: 5px;
-  color: var(--color-text-secondary);
-  font-size: var(--font-body-size);
-  font-family: inherit;
-  padding: 4px 8px;
-  cursor: pointer;
-  transition: background 0.1s, color 0.1s;
-}
-.copy-btn:hover { background: var(--color-bg-secondary); color: var(--color-text); }
-.copy-btn svg { flex-shrink: 0; }
-.copy-btn.copied { color: var(--color-bg-brand); border-color: var(--color-bg-brand); }
-
 .log-list {
-  max-height: 130px;
+  max-height: 88px;
   overflow-y: auto;
   background: var(--color-bg-secondary);
   border: 1px solid var(--color-border);
@@ -203,139 +173,147 @@ html, body {
 .log-entry { color: var(--color-text-secondary); white-space: pre-wrap; word-break: break-word; }
 .log-entry.error { color: var(--color-danger); }
 .log-entry .log-time { color: var(--color-text-tertiary); margin-right: 6px; }
+
+/* ── Footer ── */
+.footer {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 16px 12px;
+  border-top: 1px solid var(--color-border);
+  flex-shrink: 0;
+}
+.footer .btn-primary { flex: 1; }
 </style>
 </head>
 <body>
 <div class="plugin-wrap" id="plugin-wrap">
 
   <div class="content-header">
-    <span class="header-title">Figma Connector</span>
+    <span class="header-title">Figma Arrow Manager</span>
   </div>
 
-  <div class="step">
-    <div class="tip">
-      <b>Ctrl+C</b> your styled connector once, then <b>Ctrl+V</b> a copy for each new connection.
-    </div>
-    <div class="instructions">
-      Select the copy plus the two elements to connect, then click Connect.
-    </div>
-    <div class="status-box" id="status">Nothing selected</div>
-    <button type="button" class="primary-btn" id="connect-btn" disabled>Connect Selected</button>
+  <!-- Connect elements -->
+  <div class="section">
+    <p class="helper">Paste one connector, then select it with the two elements you want to connect.</p>
+    <div class="status-box" id="selection-status">Nothing selected</div>
+    <button type="button" class="btn-primary full-width" id="connect-btn" disabled>Connect selected</button>
   </div>
 
   <div class="divider"></div>
 
-  <!-- Manage Connectors: visibility / color / weight for every connector on the page -->
-  <div class="step">
-    <span class="section-label">Manage Connectors</span>
-
-    <div class="row-between">
-      <span>Show connector arrows</span>
-      <label class="switch">
+  <!-- Show connector arrows -->
+  <div class="section">
+    <div class="row-2col">
+      <label id="visibility-label">Toggle visibility · 0 connectors</label>
+      <div class="switch control">
         <input type="checkbox" id="visibility-toggle" checked aria-label="Show connector arrows">
         <span class="switch-track"><span class="switch-thumb"></span></span>
-      </label>
+      </div>
     </div>
-
-    <div class="style-row">
-      <input type="color" class="color-input" id="color-picker" value="#0D99FF" aria-label="Connector color" title="Connector color">
-      <input type="range" class="weight-slider" id="weight-slider" min="0.5" max="10" step="0.5" value="2" aria-label="Connector stroke weight" title="Connector stroke weight">
-      <span class="weight-value" id="weight-value">2</span>
-      <button type="button" class="secondary-btn" id="apply-style-btn">Apply</button>
-    </div>
-
-    <button type="button" class="secondary-btn full-width" id="randomize-btn">Randomize colors</button>
-
-    <div class="status-box" id="connector-count-status">0 connectors on this page</div>
   </div>
 
-  <!-- Logs -->
-  <div class="log-section">
-    <div class="log-header">
-      <span class="section-label">Log</span>
-      <button type="button" class="copy-btn" id="copy-log-btn">
-        <svg width="12" height="12" viewBox="0 0 12 12" fill="none" xmlns="http://www.w3.org/2000/svg">
-          <rect x="4" y="4" width="7" height="7" rx="1" stroke="currentColor" stroke-width="1.1"/>
-          <path d="M2.5 8V2.5C2.5 1.94772 2.94772 1.5 3.5 1.5H8" stroke="currentColor" stroke-width="1.1"/>
-        </svg>
-        <span id="copy-log-label">Copy</span>
-      </button>
+  <!-- Connector colors -->
+  <div class="section">
+    <div class="row-2col">
+      <label>Set all to one color</label>
+      <input type="color" class="color-input control" id="color-picker" value="#0D99FF" aria-label="Connector color" title="Connector color">
     </div>
+  </div>
+
+  <!-- Thickness -->
+  <div class="section">
+    <div class="row-2col">
+      <label>Weight</label>
+      <div class="weight-control control">
+        <input type="range" class="weight-slider" id="weight-slider" min="0.5" max="10" step="0.5" value="2" aria-label="Connector stroke weight">
+        <span class="weight-value" id="weight-value">2</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="divider"></div>
+
+  <!-- Activity -->
+  <div class="section">
+    <label>Activity</label>
     <div class="log-list" id="log-list">
-      <div class="log-empty">No actions yet.</div>
+      <div class="log-empty">No activity yet.</div>
     </div>
+    <button type="button" class="btn-secondary full-width" id="copy-log-btn">Copy log</button>
+  </div>
+
+  <div class="footer">
+    <button type="button" class="btn-primary" id="apply-btn">Apply</button>
+    <button type="button" class="btn-secondary" id="randomize-btn">Randomize colors</button>
   </div>
 
 </div>
 
 <script>
-var statusBox = document.getElementById('status');
-var connectBtn = document.getElementById('connect-btn');
-var logList = document.getElementById('log-list');
-var copyLogBtn = document.getElementById('copy-log-btn');
-var copyLogLabel = document.getElementById('copy-log-label');
 var pluginWrap = document.getElementById('plugin-wrap');
+var selectionStatus = document.getElementById('selection-status');
+var connectBtn = document.getElementById('connect-btn');
 var visibilityToggle = document.getElementById('visibility-toggle');
+var visibilityLabel = document.getElementById('visibility-label');
 var colorPicker = document.getElementById('color-picker');
 var weightSlider = document.getElementById('weight-slider');
 var weightValue = document.getElementById('weight-value');
-var applyStyleBtn = document.getElementById('apply-style-btn');
+var applyBtn = document.getElementById('apply-btn');
 var randomizeBtn = document.getElementById('randomize-btn');
-var connectorCountStatus = document.getElementById('connector-count-status');
+var copyLogBtn = document.getElementById('copy-log-btn');
+var logList = document.getElementById('log-list');
 
 var logEntries = []; // { time, level, message }
 
 connectBtn.addEventListener('click', function () {
   parent.postMessage({ pluginMessage: { type: 'connect' } }, '*');
 });
-copyLogBtn.addEventListener('click', copyLogs);
 
 visibilityToggle.addEventListener('change', function () {
   parent.postMessage({ pluginMessage: { type: 'toggle-visibility', show: visibilityToggle.checked } }, '*');
 });
+
 weightSlider.addEventListener('input', function () {
   weightValue.textContent = weightSlider.value;
 });
-applyStyleBtn.addEventListener('click', function () {
+
+applyBtn.addEventListener('click', function () {
   parent.postMessage({ pluginMessage: { type: 'apply-style', color: colorPicker.value, weight: Number(weightSlider.value) } }, '*');
 });
+
 randomizeBtn.addEventListener('click', function () {
   parent.postMessage({ pluginMessage: { type: 'randomize-colors' } }, '*');
 });
 
+copyLogBtn.addEventListener('click', copyLogs);
+
 window.onmessage = function (event) {
   var msg = event.data.pluginMessage;
   if (!msg) return;
-  if (msg.type === 'selection-status') render(msg);
+  if (msg.type === 'selection-status') renderSelection(msg);
   if (msg.type === 'connector-state') renderConnectorState(msg);
   if (msg.type === 'log') addLogEntry(msg);
 };
 
-function renderConnectorState(state) {
-  visibilityToggle.checked = state.shown;
-  connectorCountStatus.textContent = state.count + ' connector' + (state.count === 1 ? '' : 's') + ' on this page';
+function renderSelection(status) {
+  connectBtn.disabled = !status.canConnect;
+  if (status.count === 0) {
+    selectionStatus.textContent = 'Nothing selected';
+    selectionStatus.className = 'status-box';
+  } else if (status.canConnect) {
+    selectionStatus.textContent = status.count + ' selected — ' + status.names.join(', ');
+    selectionStatus.className = 'status-box ready';
+  } else {
+    selectionStatus.textContent = status.count + ' selected — ' + status.names.join(', ');
+    selectionStatus.className = 'status-box warn';
+  }
   scheduleResize();
 }
 
-function render(status) {
-  connectBtn.disabled = !status.canConnect;
-
-  if (status.count === 0) {
-    statusBox.textContent = 'Nothing selected';
-    statusBox.className = 'status-box';
-  } else if (status.canConnect) {
-    statusBox.textContent = 'Selected: ' + status.names.join(', ');
-    statusBox.className = 'status-box ready';
-  } else if (status.connectorCount === 0) {
-    statusBox.textContent = 'No connector in selection — paste one first (Ctrl+V).';
-    statusBox.className = 'status-box warn';
-  } else if (status.connectorCount > 1) {
-    statusBox.textContent = 'More than one connector selected — select only one.';
-    statusBox.className = 'status-box warn';
-  } else {
-    statusBox.textContent = 'Select exactly 3 items: 1 connector + 2 elements (currently ' + status.count + ' selected).';
-    statusBox.className = 'status-box warn';
-  }
+function renderConnectorState(state) {
+  visibilityToggle.checked = state.shown;
+  visibilityLabel.textContent = 'Toggle visibility · ' + state.count + ' connector' + (state.count === 1 ? '' : 's');
   scheduleResize();
 }
 
@@ -356,8 +334,8 @@ function addLogEntry(entry) {
 
 function copyLogs() {
   var text = logEntries.length
-    ? logEntries.map(function (e) { return '[' + e.time + '] ' + (e.level === 'error' ? 'ERROR: ' : '') + e.message; }).join('\n')
-    : 'No actions yet.';
+    ? logEntries.map(function (e) { return '[' + e.time + '] ' + e.level.toUpperCase() + ': ' + e.message; }).join('\n')
+    : 'No activity yet.';
 
   var ta = document.createElement('textarea');
   ta.value = text;
@@ -368,19 +346,11 @@ function copyLogs() {
   ta.select();
   try {
     document.execCommand('copy');
-    copyLogLabel.textContent = 'Copied';
-    copyLogBtn.classList.add('copied');
-    setTimeout(function () {
-      copyLogLabel.textContent = 'Copy';
-      copyLogBtn.classList.remove('copied');
-    }, 1200);
-  } catch (e) {
-    copyLogLabel.textContent = 'Failed';
-  }
+  } catch (e) {}
   document.body.removeChild(ta);
 }
 
-// Auto-resize the plugin window to fit content (capped in code.js between 280–700px)
+// Auto-resize the plugin window to fit content (clamped in code.js to 80–900px)
 var resizeTimer = null;
 function scheduleResize() {
   if (resizeTimer) return;

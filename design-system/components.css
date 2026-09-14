@@ -7,6 +7,10 @@
    Copy the token block and whichever component blocks you need directly into
    your plugin's <style> tag. See DESIGN_SYSTEM.md in this folder for the full
    catalog, HTML markup for each component, and the Log Panel code.js contract.
+
+   Do NOT reach for Figma's `fig-*` tags (fig-button, fig-switch, etc.) instead
+   of these classes — confirmed non-functional in a real installed plugin (they
+   render unstyled). See DESIGN_SYSTEM.md Section 0.
    ============================================================================ */
 
 /* ── Tokens ──────────────────────────────────────────────────────────────
@@ -14,7 +18,7 @@
    variable, via `figma.showUI(__html__, { themeColors: true })` in code.js.
    This makes every plugin auto-match the user's real light/dark Figma theme
    instead of a hand-guessed fixed palette — confirmed working end-to-end in
-   figma-connector. Fallback values below only matter if theming ever fails
+   figma-arrow-manager. Fallback values below only matter if theming ever fails
    to inject; they are not a "pick your own palette" option.
    ── */
 :root {
