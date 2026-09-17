@@ -1,0 +1,15 @@
+{
+  "name": "Mosaic Grid Maker",
+  "id": "mosaic-grid-maker-001",
+  "api": "1.0.0",
+  "main": "code.js",
+  "documentAccess": "dynamic-page",
+  "editorType": ["figma"],
+  "relaunchButtons": [
+    {
+      "command": "mosaic-grid-maker-001",
+      "name": "Mosaic Grid Maker"
+    }
+  ],
+  "ui": "ui.html"
+}

@@ -57,6 +57,13 @@
       flex-direction: column;
     }
 
+    /* ── Scrollbars ── */
+    ::-webkit-scrollbar { width: 6px; height: 6px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: var(--color-text-tertiary); border-radius: 999px; border: none; }
+    ::-webkit-scrollbar-thumb:hover { background: var(--color-text-secondary); }
+    ::-webkit-scrollbar-corner { background: transparent; }
+
     /* ── Content header ── */
     .content-header {
       padding: 16px 24px 8px;
@@ -766,7 +773,7 @@
       parent.postMessage({ pluginMessage: { type: 'open_url', url: 'https://x.com/danielfransix' } }, '*');
     });
     document.getElementById('coffeeLink').addEventListener('click', function() {
-      parent.postMessage({ pluginMessage: { type: 'open_url', url: 'https://buymeacoffee.com/danielfransix' } }, '*');
+      parent.postMessage({ pluginMessage: { type: 'open_url', url: 'https://danielfransix.short.gy/buy-coffee' } }, '*');
     });
 
     if (window.lucide) lucide.createIcons();

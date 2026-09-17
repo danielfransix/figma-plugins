@@ -39,6 +39,13 @@
       min-height: 100vh;
     }
 
+    /* ── Scrollbars ── */
+    ::-webkit-scrollbar { width: 6px; height: 6px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: var(--text-muted); border-radius: 999px; border: none; }
+    ::-webkit-scrollbar-thumb:hover { background: var(--text-secondary); }
+    ::-webkit-scrollbar-corner { background: transparent; }
+
     .main {
       flex: 1;
       display: flex;

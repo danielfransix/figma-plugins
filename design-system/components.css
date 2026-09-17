@@ -156,6 +156,69 @@ body {
 
 .divider { height: 1px; background: var(--color-border); }
 
+/* ── Color swatch + hex input ──
+   A real <input type="color"> is opacity:0 and stacked over .color-fill,
+   which shows the picked color (set via JS: colorFill.style.background).
+   Pair with an editable hex <input> synced both ways — see figma-arrow-manager. ── */
+.color-field {
+  display: flex; align-items: center; gap: 2px;
+  background: var(--color-bg-secondary); border: 1px solid var(--color-border);
+  border-radius: var(--radius-md); padding: 3px;
+  transition: border-color 0.1s;
+}
+.color-field:focus-within { border-color: var(--color-bg-brand); }
+.color-swatch {
+  position: relative; display: block; width: 22px; height: 22px;
+  border-radius: var(--radius-sm); overflow: hidden;
+  border: 1px solid var(--color-border-strong);
+  box-shadow: inset 0 0 0 1px rgba(0,0,0,0.15);
+  flex-shrink: 0; cursor: pointer;
+}
+.color-swatch:hover { border-color: var(--color-bg-brand); }
+.color-fill { position: absolute; inset: 0; pointer-events: none; }
+.color-input { position: absolute; inset: 0; width: 100%; height: 100%; padding: 0; border: none; background: none; cursor: pointer; opacity: 0; }
+.color-hash { color: var(--color-text-tertiary); font-family: 'JetBrains Mono', Consolas, monospace; font-size: var(--font-body-size); padding-left: 2px; }
+.color-hex {
+  width: 58px; background: none; border: none; color: var(--color-text);
+  font-family: 'JetBrains Mono', Consolas, monospace; font-size: var(--font-body-size);
+  text-transform: uppercase; letter-spacing: 0.3px; padding: 4px 4px 4px 2px;
+}
+.color-hex:focus { outline: none; }
+
+/* ── Numeric stepper (minus / editable field / plus) ──
+   Prefer this over a bare <input type="range"> whenever the user needs an
+   exact value, not just a rough drag — see figma-arrow-manager (weight) and
+   mosaic-grid-maker (uniform size). Pair with a slider alongside it only when
+   the range is large enough that coarse dragging is also useful. ── */
+.stepper {
+  display: flex; align-items: stretch;
+  background: var(--color-bg-secondary); border: 1px solid var(--color-border);
+  border-radius: var(--radius-md); overflow: hidden; flex-shrink: 0;
+  transition: border-color 0.1s;
+}
+.stepper:focus-within { border-color: var(--color-bg-brand); }
+.stepper-btn {
+  display: flex; align-items: center; justify-content: center; width: 22px;
+  border: none; background: none; color: var(--color-text-secondary);
+  cursor: pointer; transition: background 0.1s, color 0.1s; flex-shrink: 0;
+}
+.stepper-btn:hover { background: var(--color-border); color: var(--color-text); }
+.stepper-btn:active { background: var(--color-border-strong); }
+.stepper-input {
+  flex: 1; min-width: 0; text-align: center; background: none; border: none;
+  border-left: 1px solid var(--color-border); border-right: 1px solid var(--color-border);
+  color: var(--color-text); font-family: inherit; font-size: var(--font-body-size); padding: 0 2px;
+}
+.stepper-input:focus { outline: none; background: var(--color-bg); }
+
+/* ── Scrollbars ── Slim, theme-matched thumb — never the browser default,
+   which renders as a chunky control with a solid white/grey track. ── */
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--color-text-tertiary); border-radius: var(--radius-pill); border: none; }
+::-webkit-scrollbar-thumb:hover { background: var(--color-text-secondary); }
+::-webkit-scrollbar-corner { background: transparent; }
+
 /* ── Log panel — see DESIGN_SYSTEM.md for the full HTML + JS + code.js contract ── */
 .log-section { border-top: 1px solid var(--color-border); padding: 10px 16px 12px; display: flex; flex-direction: column; gap: 6px; }
 .log-header { display: flex; align-items: center; justify-content: space-between; }

@@ -141,21 +141,114 @@ html, body {
 .switch input:checked + .switch-track { background: var(--color-bg-brand); }
 .switch input:checked + .switch-track .switch-thumb { transform: translateX(12px); }
 
-/* ── Color input ── */
-.color-input {
-  width: 24px;
-  height: 24px;
-  padding: 0;
+/* ── Color picker ── */
+.color-field {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  background: var(--color-bg-secondary);
   border: 1px solid var(--color-border);
+  border-radius: 6px;
+  padding: 3px;
+  transition: border-color 0.1s;
+}
+.color-field:focus-within { border-color: var(--color-bg-brand); }
+
+.color-swatch {
+  position: relative;
+  display: block;
+  width: 22px;
+  height: 22px;
   border-radius: 4px;
-  background: none;
+  overflow: hidden;
+  border: 1px solid var(--color-border-strong);
+  box-shadow: inset 0 0 0 1px rgba(0,0,0,0.15);
+  flex-shrink: 0;
   cursor: pointer;
 }
+.color-swatch:hover { border-color: var(--color-bg-brand); }
+.color-fill { position: absolute; inset: 0; pointer-events: none; }
+.color-input {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  padding: 0;
+  border: none;
+  background: none;
+  cursor: pointer;
+  opacity: 0;
+}
 
-/* ── Weight slider ── */
-.weight-control { display: flex; align-items: center; gap: 8px; width: 130px; }
-.weight-slider { flex: 1; accent-color: var(--color-bg-brand); cursor: pointer; }
-.weight-value { width: 20px; color: var(--color-text-secondary); text-align: right; flex-shrink: 0; }
+.color-hex {
+  width: 58px;
+  background: none;
+  border: none;
+  color: var(--color-text);
+  font-family: 'JetBrains Mono', Consolas, monospace;
+  font-size: var(--font-body-size);
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+  padding: 4px 4px 4px 2px;
+}
+.color-hex:focus { outline: none; }
+
+.color-hash {
+  color: var(--color-text-tertiary);
+  font-family: 'JetBrains Mono', Consolas, monospace;
+  font-size: var(--font-body-size);
+  padding-left: 2px;
+}
+
+/* ── Weight stepper ── */
+.stepper {
+  display: flex;
+  align-items: stretch;
+  background: var(--color-bg-secondary);
+  border: 1px solid var(--color-border);
+  border-radius: 6px;
+  overflow: hidden;
+  width: 92px;
+  flex-shrink: 0;
+  transition: border-color 0.1s;
+}
+.stepper:focus-within { border-color: var(--color-bg-brand); }
+.stepper-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  border: none;
+  background: none;
+  color: var(--color-text-secondary);
+  cursor: pointer;
+  transition: background 0.1s, color 0.1s;
+  flex-shrink: 0;
+}
+.stepper-btn:hover { background: var(--color-border); color: var(--color-text); }
+.stepper-btn:active { background: var(--color-border-strong); }
+.stepper-input {
+  flex: 1;
+  min-width: 0;
+  text-align: center;
+  background: none;
+  border: none;
+  border-left: 1px solid var(--color-border);
+  border-right: 1px solid var(--color-border);
+  color: var(--color-text);
+  font-family: inherit;
+  font-size: var(--font-body-size);
+  padding: 0 2px;
+}
+.stepper-input:focus { outline: none; background: var(--color-bg); }
+
+/* ── Scrollbars ── */
+* { scrollbar-width: thin; scrollbar-color: var(--color-text-tertiary) transparent; }
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--color-text-tertiary); border-radius: 999px; border: none; }
+::-webkit-scrollbar-thumb:hover { background: var(--color-text-secondary); }
+::-webkit-scrollbar-corner { background: transparent; }
 
 /* ── Log panel ── */
 .log-list {
@@ -217,7 +310,14 @@ html, body {
   <div class="section">
     <div class="row-2col">
       <label>Set all to one color</label>
-      <input type="color" class="color-input control" id="color-picker" value="#0D99FF" aria-label="Connector color" title="Connector color">
+      <div class="color-field control">
+        <span class="color-swatch">
+          <span class="color-fill" id="color-fill"></span>
+          <input type="color" class="color-input" id="color-picker" value="#0D99FF" aria-label="Connector color" title="Connector color">
+        </span>
+        <span class="color-hash">#</span>
+        <input type="text" class="color-hex" id="color-hex" value="0D99FF" maxlength="6" spellcheck="false" aria-label="Connector color hex value">
+      </div>
     </div>
   </div>
 
@@ -225,9 +325,14 @@ html, body {
   <div class="section">
     <div class="row-2col">
       <label>Weight</label>
-      <div class="weight-control control">
-        <input type="range" class="weight-slider" id="weight-slider" min="0.5" max="10" step="0.5" value="2" aria-label="Connector stroke weight">
-        <span class="weight-value" id="weight-value">2</span>
+      <div class="stepper control" id="weight-stepper">
+        <button type="button" class="stepper-btn" id="weight-decrease" aria-label="Decrease weight">
+          <svg width="10" height="10" viewBox="0 0 10 10" fill="none"><line x1="1" y1="5" x2="9" y2="5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
+        </button>
+        <input type="text" inputmode="decimal" class="stepper-input" id="weight-input" value="2" aria-label="Connector stroke weight">
+        <button type="button" class="stepper-btn" id="weight-increase" aria-label="Increase weight">
+          <svg width="10" height="10" viewBox="0 0 10 10" fill="none"><line x1="5" y1="1" x2="5" y2="9" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/><line x1="1" y1="5" x2="9" y2="5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
+        </button>
       </div>
     </div>
   </div>
@@ -257,8 +362,11 @@ var connectBtn = document.getElementById('connect-btn');
 var visibilityToggle = document.getElementById('visibility-toggle');
 var visibilityLabel = document.getElementById('visibility-label');
 var colorPicker = document.getElementById('color-picker');
-var weightSlider = document.getElementById('weight-slider');
-var weightValue = document.getElementById('weight-value');
+var colorFill = document.getElementById('color-fill');
+var colorHex = document.getElementById('color-hex');
+var weightInput = document.getElementById('weight-input');
+var weightDecrease = document.getElementById('weight-decrease');
+var weightIncrease = document.getElementById('weight-increase');
 var applyBtn = document.getElementById('apply-btn');
 var randomizeBtn = document.getElementById('randomize-btn');
 var copyLogBtn = document.getElementById('copy-log-btn');
@@ -274,12 +382,70 @@ visibilityToggle.addEventListener('change', function () {
   parent.postMessage({ pluginMessage: { type: 'toggle-visibility', show: visibilityToggle.checked } }, '*');
 });
 
-weightSlider.addEventListener('input', function () {
-  weightValue.textContent = weightSlider.value;
+// ── Color swatch + hex sync ──
+function setColor(hex) {
+  hex = hex.toUpperCase();
+  colorPicker.value = '#' + hex;
+  colorFill.style.background = '#' + hex;
+  colorHex.value = hex;
+}
+
+colorFill.style.background = colorPicker.value;
+
+colorPicker.addEventListener('input', function () {
+  setColor(colorPicker.value.replace('#', ''));
+});
+
+colorHex.addEventListener('change', function () {
+  var v = colorHex.value.trim().replace('#', '');
+  if (/^[0-9A-Fa-f]{6}$/.test(v)) {
+    setColor(v);
+  } else {
+    colorHex.value = colorPicker.value.replace('#', '').toUpperCase();
+  }
+});
+
+colorHex.addEventListener('focus', function () {
+  colorHex.select();
+});
+
+// ── Weight stepper ──
+var WEIGHT_MIN = 0.5, WEIGHT_MAX = 10, WEIGHT_STEP = 0.5;
+
+function clampWeight(v) {
+  if (isNaN(v)) v = WEIGHT_MIN;
+  v = Math.round(v / WEIGHT_STEP) * WEIGHT_STEP;
+  return Math.min(WEIGHT_MAX, Math.max(WEIGHT_MIN, v));
+}
+
+function setWeight(v) {
+  v = clampWeight(v);
+  weightInput.value = String(v);
+  return v;
+}
+
+function getWeight() {
+  return Number(weightInput.value);
+}
+
+weightInput.addEventListener('change', function () {
+  setWeight(parseFloat(weightInput.value));
+});
+
+weightInput.addEventListener('focus', function () {
+  weightInput.select();
+});
+
+weightDecrease.addEventListener('click', function () {
+  setWeight(getWeight() - WEIGHT_STEP);
+});
+
+weightIncrease.addEventListener('click', function () {
+  setWeight(getWeight() + WEIGHT_STEP);
 });
 
 applyBtn.addEventListener('click', function () {
-  parent.postMessage({ pluginMessage: { type: 'apply-style', color: colorPicker.value, weight: Number(weightSlider.value) } }, '*');
+  parent.postMessage({ pluginMessage: { type: 'apply-style', color: colorPicker.value, weight: getWeight() } }, '*');
 });
 
 randomizeBtn.addEventListener('click', function () {
