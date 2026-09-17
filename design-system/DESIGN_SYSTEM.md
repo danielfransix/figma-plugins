@@ -1,6 +1,6 @@
 # Figma Plugins — Shared Design System
 
-**Purpose:** a single reference for every plugin in this repo (`figma-linter`, `figma-selector`, `figma-relinker`, `figma-bulk-style-manipulator`, `figma-color-generator`, `figma-component-collector`, `instance-resetter`, `figma-arrow-manager`) so they look and feel like one native Figma surface, and so a new plugin can be started from a consistent baseline.
+**Purpose:** a single reference for every plugin in this repo (`figma-linter`, `figma-selector`, `figma-relinker`, `figma-bulk-style-manipulator`, `figma-color-generator`, `figma-component-collector`, `instance-resetter`, `figma-arrow-manager`, `mosaic-grid-maker`) so they look and feel like one native Figma surface, and so a new plugin can be started from a consistent baseline.
 
 **How to use this:** plugins are self-contained (`manifest.json` + `code.js` + `ui.html`, no build step, no cross-plugin imports — Figma loads each folder independently). This is a copy-paste reference, not a runtime dependency. Copy `components.css`'s token block and whichever components you need into your plugin's `<style>` tag.
 
@@ -72,8 +72,9 @@ All of these are in `components.css`, ready to paste. Class names are consistent
 | Section label | `.section-label` | Small uppercase heading above a group of controls |
 | Brand footer | `.brand-footer` / `.brand-link` | Plugin name · version · links, consistent across all plugins |
 | **Log panel** | `.log-section` / `.log-list` / `.log-entry` | See below — this is the newest, most important addition |
-| Color input | native `<input type="color">`, styled `.color-input` | A real browser color input — no Figma-native picker is reachable from a plugin iframe |
-| Range slider | native `<input type="range">`, styled `.weight-slider` + a synced numeric `<span>`/`<input>` | Pair with a JS `input` listener to mirror the value into a visible number |
+| Color swatch + hex | `.color-field` / `.color-swatch` / `.color-fill` / `.color-input` / `.color-hex` | A real `<input type="color">` sits opacity:0 over a `.color-fill` div that shows the picked color, next to an editable hex `<input>` synced both ways. No Figma-native picker is reachable from a plugin iframe — this is the polished wrapper around the plain browser one. Pioneered in `figma-color-generator`, standardized in `figma-arrow-manager`. |
+| Numeric stepper | `.stepper` / `.stepper-btn` / `.stepper-input` | Minus button, editable text field, plus button. Use whenever the user needs to set an *exact* value, not just drag roughly — a bare `<input type="range">` alone isn't enough. Pair with a slider alongside it only for large ranges where coarse dragging is also useful (see `mosaic-grid-maker`'s uniform size, 1–2000px). See `figma-arrow-manager` (weight, 0.5–10, stepper-only) for the small-range case. |
+| Scrollbars | global `::-webkit-scrollbar` rules | Every plugin should style these — the browser default renders as a chunky control with a solid white/grey track that clashes with the panel. Standard: 6px wide, transparent track, `var(--color-text-tertiary)` thumb, darkens on hover. Applies globally (`*`/`::-webkit-scrollbar`), not per scroll container. |
 
 Two components are distinctive enough to be worth lifting wholesale from where they were pioneered rather than re-described here — go read the source directly:
 - **Custom dropdown/select** (positions itself, flips up when out of space, icon + label rows) — `figma-selector/ui.html`, search for `.select-trigger`/`.select-dropdown`.
@@ -173,6 +174,7 @@ Call `log('info', ...)` or `log('error', ...)` at every point the plugin already
 | Plugin | themeColors | Font | Log panel |
 |---|---|---|---|
 | figma-arrow-manager | ✅ | Plus Jakarta Sans / JetBrains Mono | ✅ (pioneered here) |
+| mosaic-grid-maker | ✅ | Plus Jakarta Sans | — (no error/activity feed in this plugin's spec) |
 | figma-linter | migrated | migrated | added |
 | figma-selector | migrated | migrated | added |
 | figma-relinker | migrated | migrated | added |

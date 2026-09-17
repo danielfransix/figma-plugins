@@ -75,10 +75,11 @@ ul, ol { list-style: none; }
 svg { display: block; flex-shrink: 0; }
 
 /* ── Scrollbars ────────────────────────────────────────────── */
-::-webkit-scrollbar { width: 8px; height: 8px; }
+::-webkit-scrollbar { width: 6px; height: 6px; }
 ::-webkit-scrollbar-track { background: transparent; }
-::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.15); border-radius: 4px; }
-::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.25); }
+::-webkit-scrollbar-thumb { background: var(--text-muted); border-radius: 999px; border: none; }
+::-webkit-scrollbar-thumb:hover { background: var(--text-secondary); }
+::-webkit-scrollbar-corner { background: transparent; }
 
 /* ── App shell ─────────────────────────────────────────────── */
 #app {
