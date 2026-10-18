@@ -46,6 +46,13 @@ following was pulled directly from a running ProtoPie Studio 10.5.0 instance
 (`http://127.0.0.1:9982/mcp`), bypassing any AI client — confirming the server can be driven by a
 plain script.
 
+ProtoPie ships a second, unrelated server — **Code MCP** — worth naming explicitly so its absence
+from the rest of this document isn't an oversight. Code MCP runs separately via `npx`, is
+**read-only**, and exists for AI coding agents to pull a *finished* prototype's structure (scenes,
+layers, components, variables, interactions) so they can regenerate it as application code — the
+prototype-to-code handoff direction. It has no write path and is not usable for this project; only
+Studio MCP is relevant here.
+
 ### Connection lifecycle
 
 1. `initialize` (standard MCP handshake) — works immediately, no approval needed for the handshake
@@ -182,7 +189,11 @@ Steps:
 3. Confirm ProtoPie Studio's MCP server toggle and endpoint are reproducible from a clean state —
    re-check Preferences → Labs → MCP Server on a restart, confirm the port is stable or detect when
    it isn't (the docs note another port is assigned if 9982 is taken) — so the relay never hardcodes
-   an assumption the setup doesn't guarantee.
+   an assumption the setup doesn't guarantee. This matters more than it would for a personal tool:
+   this plugin is meant to be open-sourced and run on other people's machines, where 9982 may
+   already be taken by something else. The plugin's own UI needs a visible, editable endpoint field
+   (defaulting to `http://127.0.0.1:9982/mcp`, overridable) rather than a hardcoded constant — treat
+   this as a requirement from here on, not an optional nicety.
 
 ### Phase 1 — De-risk the unknowns against Studio MCP directly, no Figma involved
 
@@ -197,7 +208,27 @@ phases are written against.
    and `CONTAINER`'s full property lists, Auto-Layout-equivalent fields, and any other layer-type
    specifics not yet seen. This is a prerequisite read, not a test — do it first, since several
    later steps depend on knowing exactly what fields exist before testing them.
-2. **Batch-size and throughput test.** Against a disposable test `.pie` file, send `compose_pie`
+2. **Idempotency/tagging mechanism check — elevated to this phase because re-import is now a
+   confirmed v1 requirement, not an optional later add-on.** Re-importing a changed Figma source
+   (whole file or a specific selection — a frame, a section, a single component) must update the
+   matching existing ProtoPie scenes/layers in place rather than duplicate them, mirroring exactly
+   what `figma-plugin/src/code.ts` already does for the reverse direction via Figma's
+   `setPluginData`/`getPluginData`. Before any of Phase 5 is designed around that behavior, confirm
+   whether ProtoPie has an equivalent: read `layer_manage`, `scene_manage`, and `component_manage`'s
+   full schemas (building on step 1's full read of `layer_manage`) specifically for any generic
+   metadata/custom-data/tag field on a layer or scene, and if none exists, test whether `resolve_ids`
+   or any other read tool can reliably re-identify a previously-created entity some other way (e.g.
+   a `name` convention plus geometry, though name/geometry matching is inherently weaker than an
+   opaque tag — a renamed or moved layer could be missed or misattributed). **If no on-node tagging
+   mechanism exists**, the design commits to an external manifest instead: a small file the relay
+   keeps (likely shipped as part of the `.pie` project's working directory, or embedded via
+   `resource_manage`'s inline-data capability if ProtoPie allows storing arbitrary non-rendered data
+   that way — worth testing as an alternative to a plain sidecar file) mapping a stable Figma node
+   identity (component key, or a hash of the node's path + content, matching the `figma-plugin`'s
+   existing `hashString`-based approach) to the ProtoPie entity id `compose_pie` returned when it was
+   created. Either outcome is workable, but which one shapes the data model for everything in
+   Phase 5, so it needs an answer before that phase starts, not during it.
+3. **Batch-size and throughput test.** Against a disposable test `.pie` file, send `compose_pie`
    batches of increasing size (tens, then hundreds, then on the order of a thousand `layer_manage`
    ops) and record, for each: whether the call succeeds at all, how long the HTTP round trip takes,
    and — separately — how long Studio visibly takes to finish rendering the result (the network
@@ -205,15 +236,17 @@ phases are written against.
    either a hard rejection at some size or a point where latency stops scaling linearly. The
    outcome directly decides the chunking strategy Phase 6 implements: one call per screen, one call
    per file, or some fixed chunk size with multiple sequential calls.
-3. **`connect_studio` cold-start behavior.** The one live test so far returned a `connectionId`
+4. **`connect_studio` cold-start behavior, now specifically as a first-run experience for a
+   stranger, not just a timing question.** The one live test so far returned a `connectionId`
    immediately with no observed blocking prompt — which could mean this client type never blocks,
    or could mean a prior approval was already cached for it. Test this for real on a genuinely
    fresh state (a new Studio install or a reset approvals list, if ProtoPie exposes one, or at
    minimum a different client identifier never connected before) to find out whether a human must
-   be present to click Allow on every cold start. This directly decides whether the tool can ever
-   run unattended, or must always assume a human is at the keyboard for at least the first
-   connection of a session.
-4. **Image payload strategy.** Take a handful of real images pulled from an actual Figma file at
+   be present to click Allow on every cold start. Since this plugin is meant to be installed by
+   people with no context beyond its own README, the plugin's UI needs to anticipate this dialog
+   explicitly — a visible "check ProtoPie Studio for an approval prompt" message the moment
+   `connect_studio` is called, not a silent spinner — regardless of what the timing test finds.
+5. **Image payload strategy.** Take a handful of real images pulled from an actual Figma file at
    their real exported sizes (not synthetic small test images) and push each through `add_inline`
    as-is, then again after compression, and compare against uploading to a scratch https location
    and using `add_from_url` instead. Decide the default strategy from what actually works
@@ -221,14 +254,14 @@ phases are written against.
    `add_inline`, prefer Figma's native SVG export for vector content since it's compact text, and
    only reach for `add_from_url` if a hosting mechanism already exists for other reasons" — but
    this must be confirmed against real asset sizes, not assumed from the ~64KB guidance alone.
-5. **Auto Layout fidelity.** Build one Figma frame by hand that exercises real Auto Layout
+6. **Auto Layout fidelity.** Build one Figma frame by hand that exercises real Auto Layout
    (direction, gap, padding, alignment, wrap, nested Auto Layout), manually author the equivalent
    `layer_manage` `CONTAINER` op by hand using the full schema from step 1, push it through
    `compose_pie`, and compare the result in ProtoPie against the Figma original using
    `capture_preview` side by side. This is a manual, one-off translation exercise specifically to
    validate the mapping rule before any code tries to automate it — find the mismatches here, where
    fixing them means editing one hand-written JSON object, not debugging a plugin.
-6. **Vector/shape fidelity.** Export a non-trivial vector or icon from Figma as SVG (Figma's own
+7. **Vector/shape fidelity.** Export a non-trivial vector or icon from Figma as SVG (Figma's own
    per-node SVG export, available directly in the Plugin API), push it through `resource_manage`
    `add_inline` as an SVG resource on an `IMAGE` layer, and compare against attempting to represent
    the same shape natively via `SHAPE`'s own property schema (from step 1). The working assumption,
@@ -237,20 +270,21 @@ phases are written against.
    complexity for the small set of primitive shapes (simple rects, ovals, basic polygons) where a
    native layer is unambiguously better than a flattened image — confirm or reject that against the
    real schema rather than assuming it.
-7. **Cross-reference correctness at realistic scale.** Build one large synthetic `compose_pie`
-   batch (on the order of what step 2 found as a safe upper bound) that uses `${name.property}`
+8. **Cross-reference correctness at realistic scale.** Build one large synthetic `compose_pie`
+   batch (on the order of what step 3 found as a safe upper bound) that uses `${name.property}`
    references across dozens of entries — a resource created early in the batch referenced by a
    layer created much later, a scene created early referenced by layers throughout — and confirm
    resolution is correct and order-independent in the ways the API implies, not just for the small
    examples in `describe_ops`'s own documentation.
-8. **Schema stability check.** Studio MCP is new (the build pulled from in this investigation was
+9. **Schema stability check.** Studio MCP is new (the build pulled from in this investigation was
    tagged as a non-release/dirty build), unpublished, and could change its tool names or input
-   shapes in a future Studio update without any changelog to track against. Decide, as part of this
-   phase rather than as an afterthought, whether the relay should open every run by calling
-   `describe_ops` and comparing the live schema against what the code was written against — failing
-   loudly with a clear message if an expected op kind or field has disappeared, rather than silently
-   producing a wrong or partial import. This is cheap to build and directly prevents the worst
-   failure mode of depending on an undocumented API.
+   shapes in a future Studio update without any changelog to track against. This matters more here
+   than it would for a personal tool: a published, open-source plugin can be installed against any
+   user's Studio version, not just the one this was built and tested against. Build the relay to
+   open every run by calling `describe_ops` and comparing the live schema against what the code was
+   written against — failing loudly with a clear, specific message naming the missing op kind or
+   field, rather than silently producing a wrong or partial import. Treat this as required, not
+   optional, given the audience.
 
 ### Phase 2 — Minimal read path (Figma plugin, no network yet)
 
@@ -270,7 +304,7 @@ ProtoPie ops) can be built and tested independently.
    and "what the target format needs" as two separate, independently testable stages, worth
    deliberately reusing that separation here rather than coupling the Figma walk directly to
    `compose_pie`'s op shape).
-3. Confirm `figma.exportAsync` (for vector/SVG export, per Phase 1 step 6's chosen strategy) works
+3. Confirm `figma.exportAsync` (for vector/SVG export, per Phase 1 step 7's chosen strategy) works
    as expected from inside the plugin sandbox, with no network access required for the export call
    itself — only for sending the result onward.
 
@@ -319,39 +353,45 @@ its own checkpoint against a real Figma example before moving to the next, so a 
 traceable to one specific kind of content.
 
 1. **Multiple frames in one run** — exercises `scene_manage` `batch_add` for more than one scene
-   and confirms the batching approach from Phase 1 step 2 holds up against real (not synthetic)
+   and confirms the batching approach from Phase 1 step 3 holds up against real (not synthetic)
    content.
 2. **Text fidelity** — font family/weight/size, and the fallback case where a Figma font isn't in
    ProtoPie's font catalog (queryable via `query_design_system`); this is the same category of
    problem the existing `figma-plugin/src/code.ts` already solved for font availability in the
    reverse direction (its `drawText` falls back gracefully when a font fails to load) — same
    fallback shape is reusable here, adapted to ProtoPie's own font catalog instead of Figma's.
-3. **Images** — apply whatever strategy Phase 1 step 4 settled on, against real exported Figma
+3. **Images** — apply whatever strategy Phase 1 step 5 settled on, against real exported Figma
    image fills at realistic sizes.
-4. **Auto Layout containers** — apply the mapping rule Phase 1 step 5 validated, now driven by the
+4. **Auto Layout containers** — apply the mapping rule Phase 1 step 6 validated, now driven by the
    plugin's real walk of an Auto Layout frame rather than a hand-authored one.
-5. **Vectors/shapes** — apply the strategy Phase 1 step 6 settled on.
-6. **Components and instances** — the most complex single piece. `component_manage`'s `convert`
-   action and `layer_manage`'s `COMPONENT_INSTANCE` placement are the ProtoPie-side primitives;
-   the *resolution algorithm* — "has this component identity been seen before in this run; reuse
-   the existing Master or create a new one; substitute an instance everywhere it recurs; apply this
-   occurrence's own real text/content as an override rather than the Master's" — is structurally
-   the same problem the existing `figma-plugin/src/code.ts` already solves for the opposite
-   direction (`materializeComponents` / `drawChild` / `applyOwnText`), so that algorithm is a
-   legitimate starting reference even though every underlying API call is different. Figma's own
-   component/variant identity (component key, variant properties) is the natural source for the
-   stable identity this resolution needs.
-7. **Idempotent re-runs.** Decide whether v1 needs to support re-running an import against an
-   updated Figma source and updating the existing ProtoPie scenes/layers in place (mirroring the
-   conflict-detection and content-hash tagging the existing `figma-plugin/src/code.ts` already
-   implements via Figma's `setPluginData`/`getPluginData`), or whether a simpler "always creates
-   fresh, re-running duplicates" behavior is acceptable for an initial version. This has a real
-   technical wrinkle worth surfacing now: nothing in the `describe_ops` output seen so far suggests
-   ProtoPie layers/scenes expose an equivalent of Figma's plugin-data tagging mechanism — if that's
-   confirmed absent when this phase is reached, idempotency would have to be tracked externally
-   (a sidecar manifest file, kept by the relay, mapping Figma node identities to the ProtoPie entity
-   ids `compose_pie` returns) rather than stored on the ProtoPie nodes themselves the way the
-   existing Figma-side plugin does it.
+5. **Vectors/shapes** — apply the strategy Phase 1 step 7 settled on.
+6. **Components and instances** — the most complex single piece, and now a hard v1 requirement
+   (confirmed: feature parity with the official plugin's component handling, plus the ability to go
+   further). `component_manage`'s `convert` action and `layer_manage`'s `COMPONENT_INSTANCE`
+   placement are the ProtoPie-side primitives; the *resolution algorithm* — "has this component
+   identity been seen before in this run; reuse the existing Master or create a new one; substitute
+   an instance everywhere it recurs; apply this occurrence's own real text/content as an override
+   rather than the Master's" — is structurally the same problem the existing
+   `figma-plugin/src/code.ts` already solves for the opposite direction (`materializeComponents` /
+   `drawChild` / `applyOwnText`), so that algorithm is a legitimate starting reference even though
+   every underlying API call is different. Figma's own component/variant identity (component key,
+   variant properties) is the natural source for the stable identity this resolution needs — and is
+   also the identity the idempotency tagging in step 7 below keys on.
+7. **Idempotent, selection-scoped re-import — confirmed v1 requirement, not optional.** Re-running
+   an import — against the whole file, or against a specific selection (one frame, one section, one
+   component) — must update the matching existing ProtoPie scenes/layers in place, leave unchanged
+   content untouched, and flag a conflict rather than silently overwrite anything hand-edited in
+   ProtoPie since the last run. This mirrors exactly what `figma-plugin/src/code.ts` already does
+   for the reverse direction via Figma's `setPluginData`/`getPluginData` plus its content-hash
+   comparison (see `fingerprintNode`/`contentHash`/`appliedHash` in that file) — same algorithm,
+   different storage mechanism on this side. Build this against whichever outcome Phase 1 step 2
+   found: if ProtoPie exposes on-node tagging, mirror the existing plugin's approach directly
+   (tag each created scene/layer with its source Figma node's stable identity and a content hash,
+   compare on re-run, skip unchanged, update changed-but-unedited, flag changed-and-hand-edited); if
+   it doesn't, implement the external-manifest fallback designed in that same Phase 1 step instead.
+   Selection-scoping itself needs no extra design here — the plugin already operates on
+   `figma.currentPage.selection` from Phase 2 onward, so "re-import just this button" is already the
+   natural unit of work, not a separate mode to build.
 8. **Prototype links and Smart Animate → triggers.** `trigger_manage`/`response_manage`/
    `condition_manage` carry this, mirroring the Jump-response translation the official ProtoPie
    plugin already performs — a known-good mapping to replicate via the typed API rather than a new
@@ -393,11 +433,27 @@ traceable to one specific kind of content.
 
 ### Phase 8 — Distribution
 
-**Goal:** decide, deliberately, how this plugin reaches Figma.
+**Goal:** confirmed intent — this ships as a public open-source Figma Community plugin, not a
+locally-loaded personal tool, so "easy for a stranger to install and use" is a real requirement
+from here on, not a later nicety.
 
-1. Default to the same approach as the existing `figma-plugin/`: load locally via Import plugin
-   from manifest, no Community listing, no publishing step. Revisit only if the tool needs to be
-   used by people who can't load an unpublished plugin themselves.
+1. Target actual publishing to the Figma Community plugin directory, not local-manifest loading
+   only (the `figma-plugin/` precedent in the other repo intentionally stayed local-only because it
+   was never meant for anyone else — that reasoning doesn't carry over here). Figma's own
+   publishing review and listing requirements become a real dependency to account for in scheduling,
+   not just a build step.
+2. Write a public-facing README distinct from this internal planning document: prerequisites (Figma
+   desktop, ProtoPie Studio on a plan with MCP Core, the Labs → MCP Server toggle enabled, the
+   target `.pie` file open), install steps, and what to expect on first connection (the
+   `connect_studio` approval dialog from Phase 1 step 4 — tell people to expect it before they hit
+   it, not after).
+3. Pick an open-source license (MIT is the conventional default for a plugin like this; no
+   technical reason found in this investigation to deviate) and apply it before the first public
+   commit, not retroactively.
+4. Because installs are now uncontrolled (any Figma desktop, any ProtoPie Studio version, any OS),
+   cross-platform correctness (Windows and macOS, since both run Figma desktop and ProtoPie Studio)
+   and the Phase 1 step 9 schema-compatibility check both move from "good practice" to "required
+   before a public release," since there's no longer a single known environment to assume.
 
 ## Cross-check: are these the most performant choices available
 
@@ -420,7 +476,7 @@ first one found:
   standing up and managing a relay process — the relay is a fallback, not the default plan.
 - **Large batched `compose_pie` calls over many small ones.** `compose_pie`'s own design
   (`${name.property}` cross-referencing, `best_effort` partial success) signals this is the
-  intended usage, not an incidental allowance — Phase 1 step 2 exists specifically to find the
+  intended usage, not an incidental allowance — Phase 1 step 3 exists specifically to find the
   actual ceiling empirically rather than guessing a conservative chunk size and leaving real
   throughput on the table.
 - **Inline image payloads over externally-hosted URLs, by default.** `add_from_url` adds a network
@@ -449,9 +505,10 @@ to it in the later phases.
 Checked explicitly before calling this plan ready:
 
 - **Every open item from the feasibility findings has a corresponding resolution step in the build
-  plan.** Batch-size ceiling → Phase 1.2. `connect_studio` cold-start behavior → Phase 1.3. Image
-  size → Phase 1.4. Auto Layout fidelity → Phase 1.5. Vector/shape fidelity → Phase 1.6. None were
-  left dangling as "open" without a phase that closes them.
+  plan.** Idempotency/tagging mechanism → Phase 1.2. Batch-size ceiling → Phase 1.3. `connect_studio`
+  cold-start behavior → Phase 1.4. Image size → Phase 1.5. Auto Layout fidelity → Phase 1.6.
+  Vector/shape fidelity → Phase 1.7. None were left dangling as "open" without a phase that closes
+  them.
 - **Dependency order is consistent.** Nothing in Phase 2 onward depends on a Phase 1 decision that
   hasn't been made yet; Phase 3 deliberately doesn't depend on Phase 2's plugin code existing yet
   (it uses a hand-written fixture precisely so it doesn't have to); Phase 5's sub-steps each depend
@@ -471,32 +528,36 @@ Checked explicitly before calling this plan ready:
 - **Nothing in the plan requires code to validate it.** It was written to be readable and checkable
   as prose and sequencing alone, per the instruction this plan was written under.
 
-## Alignment needed before building
+## Alignment — decided
 
-A few decisions in here are genuine judgment calls that affect how much of this plan is worth
-building, not just how to build it — worth settling before implementation starts rather than
-discovering mid-build:
+1. **ProtoPie plan/licensing durability.** Confirmed: current plan covers Studio MCP (MCP Core
+   tier). Proceeding on that basis.
+2. **Scope of "done" for v1: full parity with the official plugin, plus more.** Confirmed. This is
+   not a narrow personal-design-system tool — every primitive the official plugin handles
+   (including components as real, reusable ProtoPie components, not flattened containers) is in
+   scope, with Phase 5 as the literal checklist. "More" concretely means, at minimum, the speed
+   this whole project exists for, plus the two items below (selection-scoped idempotent re-import,
+   and public distribution) that the official plugin doesn't offer at all.
+3. **Re-import is a v1 requirement: idempotent, and scoped to whatever is selected** (whole file, one
+   frame, one section, one component) **— not just whole-file.** Confirmed. Phase 1 step 2 now
+   resolves the open technical question this depends on (whether ProtoPie supports on-node tagging
+   or needs an external manifest) before Phase 5 step 7 builds on top of it.
+4. **Distribution: public, open-source, installable by people with no inside context.** Confirmed.
+   Phase 8 now targets actual Figma Community publishing with a public README and a license, not
+   local-manifest loading. This also raises the bar on several things that would otherwise be
+   nice-to-haves: a configurable MCP endpoint (Phase 0 step 3) instead of a hardcoded port, explicit
+   first-run guidance for the `connect_studio` approval dialog (Phase 1 step 4), and the Phase 1
+   step 9 schema-compatibility check all move from "good practice" to "required," since this now
+   has to work on machines and ProtoPie versions this plan was never tested against.
 
-1. **ProtoPie plan/licensing durability.** Studio MCP requires the MCP Core tier (Pro/Enterprise).
-   Worth confirming this is the account's standing plan rather than a trial, since the entire
-   approach depends on this endpoint continuing to be available.
-2. **Tolerance for schema churn.** Studio MCP is new, unpublished, and was pulled from a non-release
-   build during this investigation — ProtoPie could change tool names or shapes in a future Studio
-   update with no changelog to track against. Phase 1 step 8 proposes a startup compatibility check
-   as mitigation, but it's worth agreeing explicitly that this risk is acceptable for a tool built
-   against an undocumented, evolving API, rather than discovering that risk after investing in the
-   full build.
-3. **Scope of "done" for v1.** Full fidelity for *any* Figma file, or primarily the files/design
-   system this is actually meant for, with honest gap-reporting for anything outside that (the same
-   philosophy the other repo already commits to: report what's missing rather than approximate or
-   fail)? This materially changes how much effort Phase 5's harder primitives (components, Auto
-   Layout, vectors) deserve relative to just shipping the simple cases fast.
-4. **Whether re-import/idempotency is a v1 requirement.** Phase 5 step 7 flags a real technical
-   wrinkle: ProtoPie may have no equivalent of Figma's plugin-data tagging, meaning idempotent
-   re-runs would need an externally-tracked manifest rather than the clean on-node tagging the
-   existing Figma-side plugin uses. Worth deciding up front whether v1 needs this at all, since it
-   changes Phase 5's scope non-trivially either way.
-5. **Who runs this, how often, and whether it ever needs to run unattended.** This changes how much
-   Phase 1 step 3's `connect_studio` cold-start finding actually matters — a tool only ever run
-   interactively by one person at their own keyboard can tolerate an approval click every session;
-   anything meant to run unattended or on a schedule cannot.
+## Alignment — still open
+
+1. **Tolerance for schema churn, now at public-tool stakes rather than personal-tool stakes.**
+   Studio MCP is new, unpublished, and was pulled from a non-release build during this
+   investigation — ProtoPie could change tool names or shapes in a future Studio update with no
+   changelog to track against. Phase 1 step 9's startup compatibility check catches this rather
+   than failing silently, but it's worth being explicit that a published plugin depending on an
+   undocumented beta API can break for every installed user at once when ProtoPie changes it, which
+   is a different order of consequence than a personal tool quietly needing a fix. Worth deciding
+   now whether that's an acceptable ongoing maintenance commitment, not a reason to stop, but
+   something to go in with eyes open about.
