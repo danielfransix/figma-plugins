@@ -550,6 +550,36 @@ Checked explicitly before calling this plan ready:
    step 9 schema-compatibility check all move from "good practice" to "required," since this now
    has to work on machines and ProtoPie versions this plan was never tested against.
 
+## Phase 1 — resolved findings (live-tested)
+
+- **Idempotency mechanism (Phase 1 step 2): resolved, and better than either option the plan
+  considered.** Full live schema reads of `layer_manage` and `component_manage` confirm ProtoPie
+  exposes no on-node tagging/metadata field anywhere (no `pluginData`, `customData`, `annotation`,
+  or equivalent). But the sidecar-manifest fallback isn't needed either: **Figma's own nodes already
+  support arbitrary plugin-private data** (`setPluginData`/`getPluginData`, exactly what
+  `figma-plugin/src/code.ts` already uses in the reverse direction). The sync record — source node's
+  stable identity, its content hash, and the ProtoPie entity id `compose_pie` returned when it was
+  created — gets written back onto the **Figma** node, not tracked in a separate file. This is
+  strictly better than a sidecar manifest: it travels with the Figma file itself across machines and
+  collaborators automatically, with no separate file to lose, desync, or exclude from version
+  control. On re-import, read each selected Figma node's plugin data first; if a prior ProtoPie id
+  is recorded and the content hash is unchanged, skip; if changed, `batch_edit` that id; if no prior
+  record exists, create fresh and write the new record back onto the Figma node.
+- **`connect_studio` cold-start behavior (Phase 1 step 4): resolved.** Tested against a genuinely
+  new client identifier: the first call blocked (no response within 60s, only keepalives) pending a
+  native Allow/Deny dialog in Studio, and only succeeded after a human located and clicked Allow.
+  Confirms a human must be present for at least the first connection of a session — this cannot run
+  unattended on a cold start. The plugin's first-run UI must say this explicitly and before the user
+  goes looking for why nothing is happening, not just show a generic spinner.
+- **Component mapping, more direct than planned.** `component_manage`'s `convert` action turns
+  layers that already exist at scene scope into a new Master **and** replaces them with an instance
+  in place, non-destructively, in one call — so the sequence for a Figma component's first
+  occurrence is simply: `layer_manage batch_add` its tree as normal layers, then `component_manage
+  convert` those layer ids. Every later occurrence of the same Figma component is just
+  `layer_manage batch_add` with `layerType:"COMPONENT_INSTANCE"` + `properties.componentId` set to
+  the Master id `convert` returned. No separate "create an empty Master and populate it" path is
+  needed.
+
 ## Alignment — still open
 
 1. **Tolerance for schema churn, now at public-tool stakes rather than personal-tool stakes.**
