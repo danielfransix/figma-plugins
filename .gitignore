@@ -1,0 +1,9 @@
+node_modules/
+.scratch-qa/
+test/.compiled/
+figma-plugin/code.js
+figma-plugin/ui.js
+build/
+dist/
+playwright-report/
+test-results/

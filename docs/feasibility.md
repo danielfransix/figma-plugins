@@ -1,5 +1,12 @@
 # Feasibility: a deterministic Figma → ProtoPie importer
 
+> Current test evidence: [validation](validation.md) and [release checklist](release-checklist.md).
+> Implementation update (October 18, 2026): the direct null-origin Figma-to-Studio HTTP path is
+> rejected by the installed Studio server. The current implementation serves its panel through a
+> localhost helper instead. Grants are reused locally; see [connection permissions](connection-permissions.md)
+> for their expiry and the optional auto-approve launcher. The architecture and once-per-session
+> approval assumptions in the original investigation below are superseded by these measured findings.
+
 ## The problem
 
 ProtoPie's official Figma plugin is slow enough to be a real workflow blocker — user reports cite
@@ -550,44 +557,30 @@ Checked explicitly before calling this plan ready:
    step 9 schema-compatibility check all move from "good practice" to "required," since this now
    has to work on machines and ProtoPie versions this plan was never tested against.
 
-## Phase 1 — resolved findings (live-tested)
+## Current implementation findings (October 18, 2026)
 
-- **Idempotency mechanism (Phase 1 step 2): resolved, and better than either option the plan
-  considered.** Full live schema reads of `layer_manage` and `component_manage` confirm ProtoPie
-  exposes no on-node tagging/metadata field anywhere (no `pluginData`, `customData`, `annotation`,
-  or equivalent). But the sidecar-manifest fallback isn't needed either: **Figma's own nodes already
-  support arbitrary plugin-private data** (`setPluginData`/`getPluginData`, exactly what
-  `figma-plugin/src/code.ts` already uses in the reverse direction). The sync record — source node's
-  stable identity, its content hash, and the ProtoPie entity id `compose_pie` returned when it was
-  created — gets written back onto the **Figma** node, not tracked in a separate file. This is
-  strictly better than a sidecar manifest: it travels with the Figma file itself across machines and
-  collaborators automatically, with no separate file to lose, desync, or exclude from version
-  control. On re-import, read each selected Figma node's plugin data first; if a prior ProtoPie id
-  is recorded and the content hash is unchanged, skip; if changed, `batch_edit` that id; if no prior
-  record exists, create fresh and write the new record back onto the Figma node.
-- **`connect_studio` cold-start behavior (Phase 1 step 4): resolved.** Tested against a genuinely
-  new client identifier: the first call blocked (no response within 60s, only keepalives) pending a
-  native Allow/Deny dialog in Studio, and only succeeded after a human located and clicked Allow.
-  Confirms a human must be present for at least the first connection of a session — this cannot run
-  unattended on a cold start. The plugin's first-run UI must say this explicitly and before the user
-  goes looking for why nothing is happening, not just show a generic spinner.
-- **Component mapping, more direct than planned.** `component_manage`'s `convert` action turns
-  layers that already exist at scene scope into a new Master **and** replaces them with an instance
-  in place, non-destructively, in one call — so the sequence for a Figma component's first
-  occurrence is simply: `layer_manage batch_add` its tree as normal layers, then `component_manage
-  convert` those layer ids. Every later occurrence of the same Figma component is just
-  `layer_manage batch_add` with `layerType:"COMPONENT_INSTANCE"` + `properties.componentId` set to
-  the Master id `convert` returned. No separate "create an empty Master and populate it" path is
-  needed.
+The plan above is the historical investigation, not a current feature checklist. See
+[validation](validation.md), [installation](installation.md), and [release gates](release-checklist.md).
 
-## Alignment — still open
-
-1. **Tolerance for schema churn, now at public-tool stakes rather than personal-tool stakes.**
-   Studio MCP is new, unpublished, and was pulled from a non-release build during this
-   investigation — ProtoPie could change tool names or shapes in a future Studio update with no
-   changelog to track against. Phase 1 step 9's startup compatibility check catches this rather
-   than failing silently, but it's worth being explicit that a published plugin depending on an
-   undocumented beta API can break for every installed user at once when ProtoPie changes it, which
-   is a different order of consequence than a personal tool quietly needing a fix. Worth deciding
-   now whether that's an acceptable ongoing maintenance commitment, not a reason to stop, but
-   something to go in with eyes open about.
+- Studio exposes no source-link metadata. Version 2 stores target-scoped, chunked link records
+  on the Figma document root. Atomic manifest generations preserve the previous complete state
+  if persistence is interrupted. Grants are stored separately in per-user clientStorage.
+- The first connection uses Studio's native approval. Reopening reuses a valid local grant.
+  The tested build expires it after 30 minutes idle. An undocumented process environment switch
+  permits automatic approval for every local MCP client; see [permission research](connection-permissions.md).
+- Masters are created directly with component_manage add. Their returned artboard ID and actual
+  root layer ID differ; the importer resolves the root before editing it and adding children.
+  No off-canvas scratch instance is created. Native instance_override uses verified master source
+  layer IDs, including nested instance paths. Master updates preserve compatible child IDs.
+- Native array layer creates outperform many individually named layer operations. Operation and
+  UTF-8 byte limits, cross-chunk dependencies, per-node acknowledgements, and conservative uncertain
+  write protection are implemented. There is no automatic retry after an ambiguous network write.
+- The local panel helper is necessary because Studio rejects Figma's null-origin requests. It
+  serves static panel assets only; the panel talks directly to Studio. There is no remote relay.
+- Conflict checks protect the whole affected scene/master using rendered appearance, topology,
+  and interactions. This is conservative: unrelated manual edits can block a source update.
+- The compiled reader has been exercised against the real P&E Team QA file. Headless browser
+  coverage checks the actual bootstrap transport. A Figma desktop plugin run, official importer
+  comparison, macOS app run, numeric publication ID, and Community publication remain external gates.
+- Compatibility probes check required capability markers before writing. The tested MCP surface
+  is version-specific and unpublished; future Studio releases may require adapter changes.

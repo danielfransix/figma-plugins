@@ -1,0 +1,35 @@
+{
+  "name": "figma-to-protopie",
+  "private": true,
+  "version": "0.3.1",
+  "license": "MIT",
+  "type": "module",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit -p figma-plugin/tsconfig.json && tsc --noEmit -p figma-plugin/tsconfig.ui.json",
+    "build": "npm run typecheck && node scripts/build.mjs",
+    "pretest": "node scripts/build-tests.mjs",
+    "test": "node --test test/batch.test.mjs test/reader.test.mjs test/storage.test.mjs test/importer.test.mjs test/connection.test.mjs test/local-ui.test.mjs test/browser.test.mjs test/sandbox.test.mjs test/visual.test.mjs",
+    "start": "node scripts/local-ui.mjs",
+    "doctor": "node scripts/doctor.mjs",
+    "benchmark": "node build/benchmark.mjs",
+    "package": "node scripts/package.mjs",
+    "test:live": "npm run pretest && node --test --test-concurrency=1 test/engine-live.test.mjs test/figma-live.test.mjs",
+    "format": "prettier --write .",
+    "format:check": "prettier --check ."
+  },
+  "devDependencies": {
+    "@figma/plugin-typings": "^1.142.0",
+    "@types/node": "^22.0.0",
+    "esbuild": "^0.28.2",
+    "fflate": "^0.8.3",
+    "playwright": "^1.64.0",
+    "prettier": "^3.9.10",
+    "typescript": "^5.7.0"
+  },
+  "dependencies": {
+    "fast-png": "8.0.0"
+  }
+}

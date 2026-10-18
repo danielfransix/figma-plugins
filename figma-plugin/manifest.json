@@ -1,0 +1,13 @@
+{
+  "name": "Figma to ProtoPie",
+  "id": "figma-to-protopie",
+  "api": "1.0.0",
+  "main": "code.js",
+  "ui": "bootstrap.html",
+  "editorType": ["figma"],
+  "networkAccess": {
+    "allowedDomains": ["http://localhost:9983"],
+    "reasoning": "Loads the plugin panel from the local helper. The panel connects to ProtoPie Studio's local MCP server. No design data is sent to a remote service."
+  },
+  "documentAccess": "dynamic-page"
+}
