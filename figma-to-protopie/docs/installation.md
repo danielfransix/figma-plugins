@@ -24,11 +24,18 @@ different storage namespace; do not change it after users start syncing files.
 
 ## Source checkout
 
+From the root of the `figma-plugins` repository, enter the importer subfolder first:
+
 ```
+cd figma-to-protopie
 npm ci
 npm run build
 npm start
 ```
+
+If you previously registered the standalone checkout in Figma, remove its old development entry
+and import the manifest from `figma-plugins/figma-to-protopie/figma-plugin/manifest.json`.
+The plugin ID is unchanged so its existing Figma storage namespace is retained.
 
 `npm run doctor` checks the build files, helper, and Studio endpoint without requesting approval.
 `npm test` runs the offline and headless browser suite; first install its browser with

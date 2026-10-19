@@ -1,8 +1,14 @@
-name: Validate plugin
+name: Validate ProtoPie plugin
 on:
   push:
     branches: [main]
+    paths:
+      - "figma-to-protopie/**"
+      - ".github/workflows/validate-protopie.yml"
   pull_request:
+    paths:
+      - "figma-to-protopie/**"
+      - ".github/workflows/validate-protopie.yml"
   workflow_dispatch:
 permissions:
   contents: read
@@ -14,6 +20,9 @@ jobs:
         os: [windows-latest, macos-latest]
         node: [20, 24]
     runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        working-directory: figma-to-protopie
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
@@ -22,6 +31,7 @@ jobs:
         with:
           node-version: ${{ matrix.node }}
           cache: npm
+          cache-dependency-path: figma-to-protopie/package-lock.json
       - run: npm ci
       - run: npx playwright install chromium
       - run: npm test
@@ -33,4 +43,4 @@ jobs:
         uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
         with:
           name: plugin-${{ matrix.os }}
-          path: dist/*
+          path: figma-to-protopie/dist/*

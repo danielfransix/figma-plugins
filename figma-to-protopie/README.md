@@ -38,6 +38,7 @@ The plugin reuses a valid approved grant when reopened. The tested Studio build 
 ## Development
 
 Requires Node.js 20 or newer. In Windows PowerShell, use npm.cmd/npx.cmd if script execution is disabled.
+Run these commands from this `figma-to-protopie` subfolder of the `figma-plugins` repository.
 
 ```sh
 npm ci
