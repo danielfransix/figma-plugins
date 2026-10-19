@@ -1,7 +1,8 @@
 import { createServer } from "node:http"
 import { readFile } from "node:fs/promises"
 import { fileURLToPath } from "node:url"
-import { resolve } from "node:path"
+import { resolve, join } from "node:path"
+import { homedir } from "node:os"
 
 const assets = new Map([
   [
@@ -12,7 +13,44 @@ const assets = new Map([
   ["/ui.js", [new URL("../figma-plugin/ui.js", import.meta.url), "text/javascript; charset=utf-8"]],
 ])
 
-export function createPanelServer() {
+export async function readFontCatalog(file) {
+  const location =
+    file ??
+    join(
+      process.platform === "win32"
+        ? (process.env.APPDATA ?? join(homedir(), "AppData", "Roaming"))
+        : join(homedir(), "Library", "Application Support"),
+      "ProtoPie",
+      "installedFonts.json",
+    )
+  try {
+    const data = JSON.parse(await readFile(location, "utf8"))
+    if (!Array.isArray(data)) return { fonts: [], available: false }
+    const fonts = data
+      .filter(
+        (font) =>
+          font &&
+          [font.family, font.style, font.postscriptName].every(
+            (value) => typeof value === "string" && value.length > 0 && value.length < 256,
+          ) &&
+          Number.isFinite(font.weight) &&
+          font.weight > 0 &&
+          font.weight <= 1000,
+      )
+      .map(({ family, style, postscriptName, weight, italic }) => ({
+        family,
+        style,
+        postscriptName,
+        weight,
+        italic: italic === true,
+      }))
+    return { fonts, available: true }
+  } catch {
+    return { fonts: [], available: false }
+  }
+}
+
+export function createPanelServer({ fontCatalogFile } = {}) {
   return createServer(async (req, res) => {
     if (!/^(?:127\.0\.0\.1|localhost):\d+$/.test(req.headers.host ?? "")) {
       res.writeHead(403).end("Local helper only")
@@ -26,6 +64,17 @@ export function createPanelServer() {
       res
         .writeHead(200, { "Content-Type": "application/json", "Cache-Control": "no-store" })
         .end('{"service":"figma-to-protopie-panel"}')
+      return
+    }
+    if (req.url === "/font-catalog") {
+      const content = JSON.stringify(await readFontCatalog(fontCatalogFile))
+      res
+        .writeHead(200, {
+          "Content-Type": "application/json",
+          "Cache-Control": "no-store",
+          "X-Content-Type-Options": "nosniff",
+        })
+        .end(req.method === "HEAD" ? undefined : content)
       return
     }
     const asset = assets.get(req.url)

@@ -5,10 +5,17 @@ export interface Asset {
   mimeType: "image/svg+xml" | "image/png" | "image/jpeg" | "image/webp"
   data: string
 }
+export interface FontRequest {
+  family: string
+  style: string
+  weight?: number
+  variationSettings?: Record<string, number>
+}
 export interface DesignNode {
   id: string
   type: LayerType
   props: Properties
+  font?: FontRequest
   children: DesignNode[]
   asset?: string
   component?: string

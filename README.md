@@ -11,7 +11,7 @@ Enable ProtoPie's MCP server under Preferences > Labs, open the target Pie, sele
 ## Features
 
 - Frames, sections, a page, all pages in a file, or individual layer selections.
-- Native rectangles, ellipses, uniform text, corners, rotation, and scrolling containers.
+- Native rectangles, ellipses, editable text and single-line styled text runs, corners, rotation, and scrolling containers.
 - Live auto layout and Match canvas size enabled by default; turn off Live auto layout to keep resolved Figma positions and fixed dimensions.
 - Optional component creation with reusable masters, nested components, compatible instance text overrides, and master updates. Instances with unsupported overrides or different resolved geometry import as their actual editable layers.
 - Basic prototype triggers, scene navigation including Smart Animate, URL links, and variables. Normal imports ask how to handle unlinked variable-name collisions; Import as new creates independent variables with unique names.
@@ -23,7 +23,11 @@ Turn off **Create components** to import instances and component definitions as 
 
 **Clip truncated text** starts on. Single-line text with Figma truncation enabled is imported as editable Auto Width text inside a clipping container. The container inherits the source width and Fill sizing (with Live auto layout on), preserving the available space without wrapping or adding ellipses. Turn it off for the previous text behavior. Ordinary wrapping text and multi-line truncation are unchanged. Changing this setting applies on the next import; updating existing shared masters still requires **Update shared masters**.
 
-Complex paints, mixed or decorated text, masks, vectors, and unsupported effects use SVG images with explicit notes. Instances whose source masters are hidden also use an SVG of the visible instance. Empty exported artwork keeps an invisible layout placeholder; other export failures identify the layer in the downloaded diagnostic. Advanced conditional prototypes, overlays, interactive variant changes, and media actions are reported as unsupported. See [release checklist](docs/release-checklist.md) for the exact boundaries and external release gates.
+Text is never exported as SVG or a bitmap. Single-line mixed styling uses editable native text runs, retaining fonts, sizes, solid colors and spacing without stretching them to Fill. Unsupported text decorations and paints are simplified with explicit notes. Mixed styling in multi-line paragraphs currently uses the first run's style while preserving the complete editable text and wrapping. Missing or incomplete styled-text metadata stops the read with a clear error. Containers containing text retain native children even when their masks or effects cannot be reproduced exactly.
+
+Font matching retains the requested family, named style, numeric weight and variable weight axis for every native text run. The local helper reads Studio's installed-font metadata (names and weights only), allowing the importer to select verified font faces even when Windows uses different family/style names. Font files and file paths are not exposed by this endpoint. Missing weights, unsupported variable axes and unavailable font metadata produce explicit import notes. After updating an older helper, restart it as well as reopening the plugin.
+
+Complex non-text artwork, vectors, and unsupported non-text effects can use SVG images with explicit notes. Hidden-master instances retain native children when they contain text; non-text instances can use an SVG of the visible instance. Empty exported artwork keeps an invisible layout placeholder; other export failures identify the layer in the downloaded diagnostic. Advanced conditional prototypes, overlays, interactive variant changes, and media actions are reported as unsupported. See [release checklist](docs/release-checklist.md) for the exact boundaries and external release gates.
 
 ## Permission prompts
 

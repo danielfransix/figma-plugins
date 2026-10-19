@@ -9,6 +9,8 @@ import {
   type ReadFailure,
 } from "./design"
 
+import { nativeText, hasMixedTextStyle, displayText, TEXT_STYLE_FIELDS } from "./text"
+
 export class ReadDesignError extends Error {
   constructor(readonly diagnostic: ReadFailure) {
     super(diagnostic.message)
@@ -249,15 +251,34 @@ export async function readDesign(
   function note(node: { name: string }, message: string) {
     design.notes.push(`${node.name}: ${message}`)
   }
+  const textSubtrees = new WeakMap<SceneNode, boolean>()
+  function containsText(node: SceneNode): boolean {
+    const cached = textSubtrees.get(node)
+    if (cached !== undefined) return cached
+    const result = "characters" in node || ("children" in node && node.children.some(containsText))
+    textSubtrees.set(node, result)
+    return result
+  }
   async function flattened(node: SceneNode, reason: string): Promise<DesignNode> {
+    if (node.type === "TEXT") {
+      note(node, reason + "; kept as editable text")
+      return readNode(node)
+    }
+    if (containsText(node) && "children" in node) {
+      note(
+        node,
+        reason +
+          "; kept native children to preserve editable text; unsupported container appearance may differ",
+      )
+      return readContainer(node)
+    }
     const bounds = "absoluteRenderBounds" in node ? node.absoluteRenderBounds : undefined
     // Keep an empty layer's position without asking Figma to export nonexistent artwork.
     // A zero-height LINE can still have a visible stroke, so use render bounds, not geometry.
     if (
       hiddenInDocument(node) ||
       bounds === null ||
-      (bounds && (bounds.width <= 0 || bounds.height <= 0)) ||
-      (node.type === "TEXT" && node.characters.length === 0)
+      (bounds && (bounds.width <= 0 || bounds.height <= 0))
     ) {
       note(node, "no rendered artwork; kept as an invisible placeholder")
       return {
@@ -550,7 +571,29 @@ export async function readDesign(
   }
   async function readNode(node: SceneNode): Promise<DesignNode> {
     onProgress(++count)
+    if (node.type !== "TEXT" && "characters" in node)
+      throw new Error(
+        `Editable text type ${node.type} is not supported. Text was not converted to an image.`,
+      )
     const props = geometry(node, options.liveAutoLayout)
+    if (node.type === "TEXT") {
+      style(node, props)
+      const clip = clipsText(node) && !!node.characters.length
+      const result = nativeText(
+        node,
+        api,
+        props,
+        clip,
+        options.liveAutoLayout === true,
+        (message) => note(node, message),
+      )
+      result.reactions = reactions(node)
+      if (clip) {
+        clippedTexts++
+        if (result.children.length === 1) clippedSources.add(node.id.split(";").pop()!)
+      }
+      return result
+    }
     const fills =
       "fills" in node && node.fills !== api.mixed
         ? node.fills.filter((p) => p.visible !== false)
@@ -633,113 +676,6 @@ export async function readDesign(
         children: [],
         reactions: reactions(node),
       }
-    if (node.type === "TEXT") {
-      if (
-        node.fontName === api.mixed ||
-        node.fontSize === api.mixed ||
-        node.fills === api.mixed ||
-        node.letterSpacing === api.mixed ||
-        node.lineHeight === api.mixed
-      )
-        return flattened(node, "mixed text styling")
-      if (
-        ("textDecoration" in node && node.textDecoration !== "NONE") ||
-        ("textCase" in node && node.textCase !== "ORIGINAL")
-      )
-        return flattened(node, "text decoration or transformed case")
-      props.text = node.characters
-      props.fontSize = node.fontSize
-      props.fillEnabled = false
-      props.font = `${node.fontName.family}-${node.fontName.style.replace(/\s+/g, "")}`
-      props.textColor = fills[0]?.type === "SOLID" ? hex(fills[0].color) : "#000000"
-      props.textOpacity =
-        fills[0]?.type === "SOLID" ? Math.round((fills[0].opacity ?? 1) * 100) : 100
-      props.textAlign =
-        node.textAlignHorizontal === "JUSTIFIED" ? "JUSTIFY" : node.textAlignHorizontal
-      props.verticalAlign = node.textAlignVertical === "CENTER" ? "MIDDLE" : node.textAlignVertical
-      props.sizeMode = !options.liveAutoLayout
-        ? "FIXED_SIZE"
-        : node.textAutoResize === "WIDTH_AND_HEIGHT"
-          ? "AUTO_WIDTH"
-          : node.textAutoResize === "HEIGHT"
-            ? "AUTO_HEIGHT"
-            : "FIXED_SIZE"
-      props.letterSpacing =
-        node.letterSpacing.unit === "PIXELS"
-          ? (node.letterSpacing.value / node.fontSize) * 100
-          : node.letterSpacing.value
-      props.autoLineHeight = node.lineHeight.unit === "AUTO"
-      if (node.lineHeight.unit !== "AUTO")
-        props.lineHeight =
-          node.lineHeight.unit === "PIXELS"
-            ? node.lineHeight.value / node.fontSize
-            : node.lineHeight.value / 100
-      if (clipsText(node)) {
-        clippedTexts++
-        clippedSources.add(node.id.split(";").pop()!)
-        return {
-          id: node.id,
-          type: "CONTAINER",
-          props: {
-            ...geometry(node, options.liveAutoLayout),
-            name: `${node.name} (text clip)`,
-            fillEnabled: false,
-            borderEnabled: false,
-            shadowEnabled: false,
-            clipChildren: true,
-            layoutMode: "HORIZONTAL",
-            layoutWrap: "NO_WRAP",
-            primaryAxisSizingMode: "FIXED",
-            counterAxisSizingMode: "FIXED",
-            primaryAxisAlignItems:
-              node.textAlignHorizontal === "CENTER"
-                ? "CENTER"
-                : node.textAlignHorizontal === "RIGHT"
-                  ? "MAX"
-                  : "MIN",
-            counterAxisAlignItems:
-              node.textAlignVertical === "CENTER"
-                ? "CENTER"
-                : node.textAlignVertical === "BOTTOM"
-                  ? "MAX"
-                  : "MIN",
-            itemSpacing: 0,
-            paddingLeft: 0,
-            paddingRight: 0,
-            paddingTop: 0,
-            paddingBottom: 0,
-            layoutSizingVertical:
-              options.liveAutoLayout && props.layoutSizingVertical === "FILL" ? "FILL" : "FIXED",
-          },
-          children: [
-            {
-              id: `${node.id}:text-content`,
-              type: "TEXT",
-              props: {
-                ...props,
-                x: 0,
-                y: 0,
-                rotation: 0,
-                opacity: 100,
-                invisible: false,
-                sizeMode: "AUTO_WIDTH",
-                layoutPositioning: "AUTO",
-                layoutGrow: 0,
-                layoutSizingHorizontal: "HUG",
-                layoutSizingVertical: "HUG",
-                fixLeft: false,
-                fixRight: false,
-                fixTop: false,
-                fixBottom: false,
-              },
-              children: [],
-            },
-          ],
-          reactions: reactions(node),
-        }
-      }
-      return { id: node.id, type: "TEXT", props, children: [], reactions: reactions(node) }
-    }
     if (node.type === "INSTANCE" || node.type === "COMPONENT") {
       if (options.createComponents === false) return readContainer(node)
       if (node.type === "INSTANCE") {
@@ -777,6 +713,7 @@ export async function readDesign(
         if (instance.type === "TEXT" && source.type === "TEXT") {
           const styles = [
             "fontName",
+            "fontWeight",
             "fontSize",
             "fills",
             "letterSpacing",
@@ -791,21 +728,28 @@ export async function readDesign(
           ] as const
           if (styles.some((key) => JSON.stringify(instance[key]) !== JSON.stringify(source[key])))
             resolvedReason = `text styling differs on ${instance.name}`
+          if (hasMixedTextStyle(instance, api) || hasMixedTextStyle(source, api)) {
+            if (
+              typeof instance.getStyledTextSegments !== "function" ||
+              typeof source.getStyledTextSegments !== "function" ||
+              JSON.stringify(instance.getStyledTextSegments([...TEXT_STYLE_FIELDS])) !==
+                JSON.stringify(source.getStyledTextSegments([...TEXT_STYLE_FIELDS]))
+            )
+              resolvedReason = "mixed text styling differs; preserving resolved native text runs"
+          }
         }
         if (
           instance.type === "TEXT" &&
           source.type === "TEXT" &&
           instance.characters !== source.characters
         ) {
-          if (
-            source.fontName === api.mixed ||
-            source.fontSize === api.mixed ||
-            source.fills === api.mixed ||
-            source.letterSpacing === api.mixed ||
-            source.lineHeight === api.mixed
-          )
-            resolvedReason = "overridden mixed text requires the resolved artwork"
-          overrides.push({ sourceId, instancePath, props: { text: instance.characters } })
+          if (hasMixedTextStyle(source, api))
+            resolvedReason = "overridden mixed text requires resolved native text runs"
+          overrides.push({
+            sourceId,
+            instancePath,
+            props: { text: displayText(instance.characters, source.textCase) },
+          })
         }
         if ("children" in instance && "children" in source) {
           if (instance.children.length !== source.children.length) {

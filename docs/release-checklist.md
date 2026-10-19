@@ -2,7 +2,7 @@
 
 ## Implemented and locally checked
 
-- Native shape and text reading; SVG fallback for unsupported visual constructs with visible notes.
+- Native shape and editable text reading; SVG fallback only for non-text artwork with visible notes.
 - Sections, multiple frames, entire pages, all pages in a file, and selection-scoped updates.
 - Stable layer IDs for property updates; conservative visual and interaction conflict checks.
 - Component dependency ordering, master creation and updates, and per-instance text overrides.
@@ -31,15 +31,20 @@
 
 ## Explicit limitations
 
-- Complex/mixed text, gradient paints, masks, unsupported effects, and vectors may become SVG
-  images. The panel reports this loss of editability instead of silently changing appearance.
+- Text is never exported to SVG or a bitmap, including through ancestor flattening. Single-line
+  mixed styling uses native text runs. Multi-line mixed styling currently uses the first run's
+  style with an explicit note; all text and wrapping remain editable. Unsupported text decoration,
+  gradient paint and small-caps typography are simplified with explicit notes. Incomplete text
+  metadata stops the read rather than producing text artwork. Complex containers containing text
+  retain native children and report unsupported container appearance. Non-text artwork can use SVG.
 - Advanced Figma conditional actions, mode-switching, overlays, interactive variant changes,
   media actions, and unsupported gestures are reported, not silently approximated.
 - Native reusable instance overrides cover compatible text content. Instances with other overrides,
   different resolved geometry, or incompatible children import as resolved editable layers instead
   of retaining master sharing. Complex artwork may still use SVG fallback.
-- Resolved geometry is the default. Live auto layout is optional and can differ between Figma and
-  Studio; the reported production sidebar/table failure still requires a live retry.
+- Live auto layout and Match canvas size are on by default. Live layout can differ between Figma
+  and Studio; turn it off to retain resolved geometry. The production sidebar/table still needs a
+  live retry after the recent text and layout fixes.
 - Variable values are imported; ongoing paint/property bindings and per-node mode switching are
   not preserved as live ProtoPie bindings. A source re-import refreshes resolved appearance.
 - One global Pie device size applies to every scene. Mixed-size source frames keep their bounds

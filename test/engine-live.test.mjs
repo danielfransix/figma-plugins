@@ -10,7 +10,7 @@ test(
   "live Studio: complete import, overrides, identity-preserving updates, conflicts, scoped update, and cleanup",
   { skip: !process.env.F2P_LIVE_CONNECTION },
   async (t) => {
-    const { endpoint, connectionId } = JSON.parse(
+    const { endpoint, connectionId, contextId } = JSON.parse(
       await readFile(process.env.F2P_LIVE_CONNECTION, "utf8"),
     )
     const initial = await fetch(endpoint, {
@@ -34,7 +34,13 @@ test(
         .slice(5),
     )
     const contexts = JSON.parse(envelope.result.content[0].text).contexts
-    const scratch = contexts.find((c) => c.tabName === "Untitled" && !c.filePath)
+    const scratch = contexts.find(
+      (c) =>
+        c.isActiveTab &&
+        c.tabName === "Untitled" &&
+        !c.filePath &&
+        (!contextId || c.contextId === contextId),
+    )
     assert.ok(scratch, "Open an unsaved Untitled scratch Pie for these tests")
     const studio = new Studio({ endpoint, connectionId, contextId: scratch.contextId })
     const original = await studio.tool("studio_session_init", { include_op_kinds: false })

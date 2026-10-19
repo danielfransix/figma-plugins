@@ -15,6 +15,7 @@ import { DEFAULT_LIMITS, executeBatches, type BatchLimits, type OpResult } from 
 import { Studio, type ScopeView, type ToolMetric } from "./studio"
 import { sameFingerprint, fingerprintDifference } from "./visual"
 import type { ComposeOp } from "./protopie-client"
+import { resolveFont, type InstalledFont } from "./fonts"
 
 export type VariableChoice = "existing" | "create" | "skip"
 export interface VariableCollision {
@@ -26,6 +27,7 @@ export interface VariableCollision {
   canReuse: boolean
 }
 export interface ImportOptions {
+  fontFaces?: InstalledFont[]
   verifyOnly?: boolean
   newImport?: boolean
   resolveVariableCollisions?: (
@@ -50,6 +52,7 @@ export interface ImportReport {
   verification?: {
     scope: string
     status: string
+    captureErrors?: string[]
     captures: {
       hash: string
       structure: string
@@ -325,6 +328,7 @@ export async function importDesign(
     const evidence = {
       scope: key,
       status: "pending",
+      captureErrors: [] as string[],
       captures: [] as NonNullable<ImportReport["verification"]>[number]["captures"],
     }
     ;(report.verification ??= []).push(evidence)
@@ -340,29 +344,35 @@ export async function importDesign(
       candidates.push(value)
     }
     try {
-      let view = await studio.view(
-        record.id,
-        record.kind === "component",
-        options.checkConflicts !== false,
-      )
+      let view: ScopeView | undefined
       // Persist a baseline reproduced by at least two native captures after our writes.
       // Alternating thumbnail workers need not return matching captures consecutively.
-      capture(view.fingerprint)
-      const seen = new Set([view.fingerprint])
+      const seen = new Set<string>()
       let settled = false
-      for (let attempt = 0; attempt < 5; attempt++) {
-        const next = await studio.view(
-          record.id,
-          record.kind === "component",
-          options.checkConflicts !== false,
-        )
+      let missingPreview: unknown
+      for (let attempt = 0; attempt < 6; attempt++) {
+        let next: ScopeView
+        try {
+          next = await studio.view(
+            record.id,
+            record.kind === "component",
+            options.checkConflicts !== false,
+          )
+        } catch (error) {
+          if (!String(error).includes("Studio could not produce a visual baseline")) throw error
+          // A missing thumbnail consumes the same bounded read budget; never repeat a write.
+          missingPreview = error
+          evidence.captureErrors.push(String(error))
+          continue
+        }
         capture(next.fingerprint)
         settled = [...seen].some((previous) => sameFingerprint(previous, next.fingerprint))
         seen.add(next.fingerprint)
         view = next
         if (settled) break
       }
-      if (!settled)
+      if (!view && missingPreview) throw missingPreview
+      if (!settled || !view)
         throw new Error(
           "Studio's visual baseline is still changing. Inspect this scope before updating it again.",
         )
@@ -600,12 +610,29 @@ export async function importDesign(
       const sourceProps = { ...node.props }
       const type = node.type
       if (prior) {
+        let acknowledgedParent = prior.parent
         if (parent !== prior.parent && parentId)
-          emit({
-            tool: "layer_manage",
-            input: { ...scope, action: "reorder", layerIdList: [prior.id], newParentId: parentId },
-          })
-        const changed = changedProps(prior.props, sourceProps)
+          emit(
+            {
+              tool: "layer_manage",
+              input: {
+                ...scope,
+                action: "reorder",
+                layerIdList: [prior.id],
+                newParentId: parentId,
+              },
+            },
+            (r) => {
+              if (r.ok) {
+                acknowledgedParent = parent
+                target.nodes[node.id] = { ...target.nodes[node.id], parent }
+              }
+            },
+          )
+        // Studio can change local geometry and layout while reparenting. Restore the source
+        // properties even when their values were unchanged in the source document.
+        const changed =
+          parent !== prior.parent ? { ...sourceProps } : changedProps(prior.props, sourceProps)
         if (prior.asset !== node.asset && node.asset) changed.resourceId = props.resourceId
         if (prior.component !== node.component && node.component)
           changed.componentId = props.componentId
@@ -624,7 +651,7 @@ export async function importDesign(
                 target.nodes[node.id] = {
                   ...prior,
                   props: sourceProps,
-                  parent,
+                  parent: acknowledgedParent,
                   asset: node.asset,
                   component: node.component,
                   order: node.children.map((c) => c.id),
@@ -712,6 +739,7 @@ export async function importDesign(
                 ...scope,
                 action: "reorder",
                 layerIdList: [refs.get(child.id)],
+                newParentId: refs.get(node.id),
                 nextSiblingIdx: index,
               },
             }),
@@ -1001,16 +1029,17 @@ export async function importDesign(
   }
   cancelled()
   const fonts: string[] = catalog.availableFonts ?? []
+  const fontDecisions = new Map<string, ReturnType<typeof resolveFont>>()
   for (const root of [...design.components.map((c) => c.root), ...design.units.map((u) => u.root)])
     walk(root, (node) => {
-      if (node.type !== "TEXT" || typeof node.props.font !== "string" || !fonts.length) return
+      if (node.type !== "TEXT" || typeof node.props.font !== "string") return
       const font = node.props.font
-      if (!fonts.some((f) => f === font || font.startsWith(`${f}-`))) {
-        node.props.font = "SYSTEM_DEFAULT"
-        report.notes.push(
-          `${node.props.name}: ${font} is not installed in Studio; used its system default font.`,
-        )
-      }
+      const key = stable([font, node.font])
+      const decision =
+        fontDecisions.get(key) ?? resolveFont(font, node.font, fonts, options.fontFaces)
+      fontDecisions.set(key, decision)
+      node.props.font = decision.font
+      if (decision.note) report.notes.push(`${node.props.name}: ${decision.note}`)
     })
   const validResources = new Set<string>((catalog.resources ?? []).map((r: any) => r.id))
   if (catalog.resources)

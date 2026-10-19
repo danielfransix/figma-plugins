@@ -12,7 +12,13 @@ test(
   async () => {
     const connection = JSON.parse(await readFile(process.env.F2P_LIVE_CONNECTION, "utf8"))
     const contexts = await listContexts(connection.endpoint, connection.connectionId)
-    const scratch = contexts.find((c) => c.tabName === "Untitled" && !c.filePath)
+    const scratch = contexts.find(
+      (c) =>
+        c.isActiveTab &&
+        c.tabName === "Untitled" &&
+        !c.filePath &&
+        (!connection.contextId || c.contextId === connection.contextId),
+    )
     assert.ok(scratch?.isActiveTab, "Focus an unsaved Untitled scratch Pie")
     const studio = new Studio({ ...connection, contextId: scratch.contextId }),
       state = emptyState()

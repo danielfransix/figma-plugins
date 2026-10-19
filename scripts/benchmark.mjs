@@ -28,7 +28,13 @@ else {
   connection = { endpoint, connectionId: await connectStudio(endpoint) }
 }
 const contexts = await listContexts(connection.endpoint, connection.connectionId)
-const context = contexts.find((c) => c.tabName === "Untitled" && !c.filePath)
+const context = contexts.find(
+  (c) =>
+    c.isActiveTab &&
+    c.tabName === "Untitled" &&
+    !c.filePath &&
+    (!connection.contextId || c.contextId === connection.contextId),
+)
 if (!context?.isActiveTab)
   throw new Error(
     "Focus an unsaved Untitled scratch Pie before approving the connection. The benchmark will not alter a saved project.",

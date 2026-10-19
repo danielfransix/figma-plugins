@@ -15,6 +15,91 @@ function store() {
     },
   }
 }
+
+test("every storage interruption leaves a complete committed state and permits retry", () => {
+  const previous = emptyState(),
+    next = emptyState(),
+    other = emptyState()
+  previous.scopes.screen = {
+    id: "S",
+    fingerprint: "pixels2:old:" + "ABCD".repeat(14000),
+    nodes: {},
+    reactions: {},
+  }
+  next.scopes.screen = {
+    id: "S",
+    fingerprint: "pixels2:new:" + "EFGH".repeat(16000),
+    nodes: {},
+    reactions: {},
+  }
+  for (let i = 0; i < 180; i++) {
+    previous.scopes.screen.nodes["n" + i] = {
+      id: "N" + i,
+      props: { text: "Previous \u{1f600}".repeat(30) },
+    }
+    next.scopes.screen.nodes["n" + i] = {
+      id: "N" + i,
+      props: { text: "Updated \u{1f600}".repeat(30) },
+    }
+  }
+  other.assets.untouched = "R-other"
+  for (const mode of ["snapshot", "journal", "reset", "compaction"]) {
+    const base = store()
+    writeState(base, "pie", previous)
+    writeState(base, "other-pie", other)
+    if (mode === "compaction") {
+      const changed = structuredClone(previous)
+      changed.assets.old = "R-old"
+      writePatch(base, "pie", checkpointTracker(previous).prepare(changed).patch)
+    }
+    const before = readState(base, "pie")
+    const write = (s) => {
+      if (mode === "snapshot" || mode === "compaction") writeState(s, "pie", next)
+      else
+        writePatch(
+          s,
+          "pie",
+          checkpointTracker(mode === "reset" ? emptyState() : before).prepare(next).patch,
+          mode === "reset",
+        )
+    }
+    let steps = 0
+    const dry = store(),
+      drySet = dry.setPluginData
+    for (const [k, v] of base.data) dry.data.set(k, v)
+    dry.setPluginData = (k, v) => {
+      steps++
+      drySet(k, v)
+    }
+    write(dry)
+    assert.ok(steps > 3, mode)
+    for (let failure = 1; failure <= steps; failure++) {
+      const s = store(),
+        set = s.setPluginData
+      for (const [k, v] of base.data) s.data.set(k, v)
+      let calls = 0
+      s.setPluginData = (k, v) => {
+        if (++calls === failure) throw Error("Injected storage interruption")
+        set(k, v)
+      }
+      try {
+        write(s)
+      } catch (error) {
+        assert.match(error.message, /Injected storage interruption/)
+      }
+      const actual = readState(s, "pie")
+      assert.ok(
+        JSON.stringify(actual) === JSON.stringify(before) ||
+          JSON.stringify(actual) === JSON.stringify(next),
+        `${mode} interruption ${failure} returned partial data`,
+      )
+      assert.deepEqual(readState(s, "other-pie"), other)
+      s.setPluginData = set
+      if (JSON.stringify(actual) !== JSON.stringify(next)) write(s)
+      assert.deepEqual(readState(s, "pie"), next)
+    }
+  }
+})
 test("large Unicode import state is chunked below Figma's per-entry limit and isolated by target", () => {
   const s = store(),
     state = emptyState()

@@ -1,11 +1,11 @@
 import { test } from "node:test"
 import assert from "node:assert/strict"
-import { createPanelServer } from "../scripts/local-ui.mjs"
+import { createPanelServer, readFontCatalog } from "../scripts/local-ui.mjs"
 import { request } from "node:http"
-import { readFile } from "node:fs/promises"
+import { readFile, mkdir, writeFile, unlink } from "node:fs/promises"
 import { runInNewContext } from "node:vm"
 
-test("the local helper serves only panel assets; it has no proxy or write endpoints", async (t) => {
+test("the local helper serves panel assets and font metadata; it has no proxy or write endpoints", async (t) => {
   const server = createPanelServer()
   await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve))
   t.after(() => new Promise((resolve) => server.close(resolve)))
@@ -33,6 +33,59 @@ test("the local helper serves only panel assets; it has no proxy or write endpoi
       .end()
   })
   assert.equal(status, 403)
+})
+
+test("the font catalog exposes only face metadata, without font files or filesystem paths", async (t) => {
+  const dir = new URL("../.scratch-qa/", import.meta.url),
+    file = new URL("font-catalog-input.json", dir)
+  await mkdir(dir, { recursive: true })
+  await writeFile(
+    file,
+    JSON.stringify([
+      {
+        family: "Gilroy SemiBold",
+        style: "Regular",
+        postscriptName: "Gilroy-SemiBold",
+        weight: 600,
+        italic: false,
+        path: "C:/private/font.ttf",
+        installedType: "system",
+      },
+      { family: "Bad", weight: null },
+    ]),
+  )
+  t.after(() => unlink(file))
+  const server = createPanelServer({ fontCatalogFile: file })
+  await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve))
+  t.after(() => new Promise((resolve) => server.close(resolve)))
+  const url = `http://127.0.0.1:${server.address().port}/font-catalog`
+  const response = await fetch(url),
+    result = await response.json()
+  assert.deepEqual(result, {
+    available: true,
+    fonts: [
+      {
+        family: "Gilroy SemiBold",
+        style: "Regular",
+        postscriptName: "Gilroy-SemiBold",
+        weight: 600,
+        italic: false,
+      },
+    ],
+  })
+  assert.equal(JSON.stringify(result).includes("private"), false)
+  assert.equal((await fetch(url, { method: "POST" })).status, 405)
+  assert.equal((await fetch(url, { method: "HEAD" })).status, 200)
+})
+test("missing or invalid Studio font metadata returns an honest unavailable catalog", async () => {
+  assert.deepEqual(
+    await readFontCatalog(new URL("./fixtures/not-a-font-catalog.json", import.meta.url)),
+    { fonts: [], available: false },
+  )
+  assert.deepEqual(
+    await readFontCatalog(new URL("./fixtures/step-label-source.json", import.meta.url)),
+    { fonts: [], available: false },
+  )
 })
 
 test("the bootstrap forwards only its own local panel and Figma parent messages", async () => {

@@ -52,6 +52,28 @@ function truncatedText(id = "email", extra = {}) {
     ...extra,
   })
 }
+
+test("text without visible fills stays transparent and editable in both clipping modes", async () => {
+  for (const fills of [
+    [],
+    [{ type: "SOLID", color: { r: 1, g: 0, b: 0 }, visible: false }],
+    [{ type: "SOLID", color: { r: 1, g: 0, b: 0 }, opacity: 0 }],
+  ]) {
+    for (const clipTruncatedText of [false, true]) {
+      const source = truncatedText("transparent-text", { fills })
+      source.exportAsync = async () => {
+        throw Error("Text must not be exported")
+      }
+      const design = await readDesign(api, [source], undefined, { clipTruncatedText })
+      const root = design.units[0].root,
+        text = root.type === "TEXT" ? root : root.children[0]
+      assert.equal(text.type, "TEXT")
+      assert.equal(text.props.text, source.characters)
+      assert.equal(text.props.textOpacity, 0)
+      assert.equal(design.assets.length, 0)
+    }
+  }
+})
 test("truncated text uses a Fill clipping viewport and editable unwrapped content; off keeps native text", async () => {
   for (const liveAutoLayout of [true, false]) {
     const source = truncatedText("email", { opacity: 0.5, rotation: 15 }),
@@ -202,15 +224,257 @@ test("section selection expands frames and overlapping selections import once", 
   const section = node("section", "SECTION", { children: [frame] })
   assert.equal((await readDesign(api, [section, frame])).units.length, 1)
 })
-test("mixed text uses an explicit SVG fallback instead of losing its styling", async () => {
+test("missing mixed-text metadata fails explicitly without exporting text artwork", async () => {
+  let exports = 0
   const text = node("text", "TEXT", {
     fontName: mixed,
     characters: "Mixed text",
-    exportAsync: async () => '<svg viewBox="0 0 100 30"></svg>',
+    exportAsync: async () => {
+      exports++
+      throw Error("Text must never be exported")
+    },
   })
-  const design = await readDesign(api, [text])
-  assert.equal(design.units[0].root.type, "IMAGE")
-  assert.match(design.notes[0], /mixed text/)
+  await assert.rejects(readDesign(api, [text]), /styled text runs.*not converted to an image/)
+  assert.equal(exports, 0)
+})
+test("incomplete styled-text coverage stops instead of dropping text or exporting artwork", async () => {
+  const label = mixedLabel()
+  const original = label.getStyledTextSegments
+  label.getStyledTextSegments = () => original().slice(0, 1)
+  await assert.rejects(readDesign(api, [label]), /incomplete styled text runs/)
+})
+test("unsupported editable text types also stay out of ancestor artwork exports", async () => {
+  let exports = 0
+  const text = node("curved-text", "TEXT_PATH", {
+    characters: "Curved",
+    exportAsync: async () => {
+      exports++
+      throw Error("No text artwork")
+    },
+  })
+  const frame = node("parent", "FRAME", {
+    children: [text],
+    fills: [{ type: "GRADIENT_LINEAR", gradientStops: [] }],
+    exportAsync: async () => {
+      exports++
+      throw Error("No text artwork")
+    },
+  })
+  await assert.rejects(readDesign(api, [frame]), /Editable text type TEXT_PATH is not supported/)
+  assert.equal(exports, 0)
+})
+
+test("recorded required step labels stay native and preserve both colors without stretching", async () => {
+  const fixture = JSON.parse(
+    await readFile(new URL("./fixtures/step-label-source.json", import.meta.url), "utf8"),
+  )
+  for (const liveAutoLayout of [true, false])
+    for (const clipTruncatedText of [true, false]) {
+      for (const { source, segments } of fixture.labels) {
+        const label = node(source.id, "TEXT", {
+          ...source,
+          fills: mixed,
+          getStyledTextSegments: () => structuredClone(segments),
+          exportAsync: async () => {
+            throw Error("Text must never become artwork")
+          },
+        })
+        const design = await readDesign(api, [label], undefined, {
+            liveAutoLayout,
+            clipTruncatedText,
+          }),
+          wrapper = design.units[0].root
+        assert.equal(design.assets.length, 0)
+        assert.equal(wrapper.type, "CONTAINER")
+        assert.equal(wrapper.props.width, 160)
+        assert.equal(wrapper.props.height, 21)
+        assert.equal(
+          wrapper.props.clipChildren,
+          false,
+          "these real labels have truncation disabled",
+        )
+        assert.equal(wrapper.props.layoutSizingHorizontal, liveAutoLayout ? "FILL" : "FIXED")
+        assert.equal(wrapper.children.length, 2)
+        assert.equal(wrapper.children.map((n) => n.props.text).join(""), source.characters)
+        assert.equal(wrapper.children[0].props.textColor, "#0F172B")
+        assert.equal(wrapper.children[1].props.textColor, "#FB2C36")
+        for (const text of wrapper.children) {
+          assert.equal(text.type, "TEXT")
+          assert.equal(text.props.font, "Gilroy-Regular")
+          assert.equal(text.props.fontSize, 14)
+          assert.equal(text.props.lineHeight, 1.5)
+          assert.equal(text.props.sizeMode, "AUTO_WIDTH")
+          assert.equal(text.props.layoutSizingHorizontal, "HUG")
+          assert.equal(text.props.layoutGrow, 0)
+          assert.equal(text.props.width, undefined)
+        }
+      }
+    }
+})
+
+function mixedLabel(extra = {}) {
+  const label = truncatedText("required", {
+    characters: "Required*",
+    fills: mixed,
+    textTruncation: "DISABLED",
+    maxLines: null,
+    ...extra,
+  })
+  const segment = (characters, start, fill) => ({
+    characters,
+    start,
+    end: start + characters.length,
+    fontName: label.fontName,
+    fontSize: label.fontSize,
+    letterSpacing: label.letterSpacing,
+    lineHeight: label.lineHeight,
+    textCase: "ORIGINAL",
+    textDecoration: "NONE",
+    fills: [{ type: "SOLID", color: fill, opacity: 1 }],
+  })
+  label.getStyledTextSegments = () => [
+    segment(label.characters.slice(0, -1), 0, { r: 0, g: 0, b: 0 }),
+    segment(label.characters.slice(-1), label.characters.length - 1, { r: 1, g: 0, b: 0 }),
+  ]
+  label.exportAsync = async () => {
+    throw Error("Text must not be exported")
+  }
+  return label
+}
+test("rich native runs honor the clipping toggle and preserve opacity exactly once", async () => {
+  const label = mixedLabel({ textTruncation: "ENDING", maxLines: 1, opacity: 0.5, rotation: 20 })
+  for (const clipTruncatedText of [true, false]) {
+    const design = await readDesign(api, [label], undefined, {
+      liveAutoLayout: true,
+      clipTruncatedText,
+    })
+    const wrapper = design.units[0].root
+    assert.equal(wrapper.props.clipChildren, clipTruncatedText)
+    assert.equal(wrapper.props.rotation, -20)
+    assert.equal(wrapper.props.opacity, 50)
+    assert.ok(
+      wrapper.children.every(
+        (n) => n.type === "TEXT" && n.props.rotation === 0 && n.props.opacity === 100,
+      ),
+    )
+    assert.equal(design.assets.length, 0)
+  }
+})
+test("text inside masks, complex paints, and unresolved instances never enters ancestor image exports", async () => {
+  let exports = 0
+  for (const extra of [
+    { fills: [{ type: "GRADIENT_LINEAR", gradientStops: [] }] },
+    { children: [node("mask", "RECTANGLE", { isMask: true }), mixedLabel()] },
+    { type: "INSTANCE", overrides: [], getMainComponentAsync: async () => null },
+  ]) {
+    const frame = node("frame", "FRAME", {
+      children: [mixedLabel()],
+      ...extra,
+      exportAsync: async () => {
+        exports++
+        throw Error("Ancestor contains editable text")
+      },
+    })
+    const design = await readDesign(api, [frame], undefined, { liveAutoLayout: true })
+    const types = []
+    const visit = (n) => {
+      types.push(n.type)
+      n.children.forEach(visit)
+    }
+    visit(design.units[0].root)
+    assert.ok(types.includes("TEXT"))
+    assert.equal(types.includes("IMAGE"), false)
+    assert.equal(design.assets.length, 0)
+    assert.match(design.notes.join("\n"), /preserve editable text/)
+  }
+  assert.equal(exports, 0)
+})
+test("unsupported text decoration, case and paint retain editable text with explicit notes", async () => {
+  const source = truncatedText("decorated", {
+    textTruncation: "DISABLED",
+    textCase: "UPPER",
+    textDecoration: "UNDERLINE",
+    fills: [
+      {
+        type: "GRADIENT_LINEAR",
+        gradientStops: [{ position: 0, color: { r: 0, g: 1, b: 0, a: 0.5 } }],
+        opacity: 0.5,
+      },
+    ],
+    exportAsync: async () => {
+      throw Error("No text export")
+    },
+  })
+  const design = await readDesign(api, [source])
+  assert.equal(design.units[0].root.type, "TEXT")
+  assert.equal(design.units[0].root.props.text, source.characters.toUpperCase())
+  assert.equal(design.units[0].root.props.textColor, "#00FF00")
+  assert.equal(design.units[0].root.props.textOpacity, 25)
+  assert.match(design.notes.join("\n"), /decoration/)
+  assert.match(design.notes.join("\n"), /gradient text/)
+  assert.equal(design.assets.length, 0)
+})
+test("multi-line mixed styling stays editable with an explicit simplification note", async () => {
+  const label = mixedLabel({ characters: "Long multi-line text\nwith an asterisk*", height: 60 })
+  const design = await readDesign(api, [label], undefined, { liveAutoLayout: true })
+  assert.equal(design.units[0].root.type, "TEXT")
+  assert.equal(design.units[0].root.props.text, label.characters)
+  assert.equal(design.units[0].root.props.sizeMode, "AUTO_HEIGHT")
+  assert.match(design.notes.join("\n"), /multi-line text uses the first run/)
+  assert.equal(design.assets.length, 0)
+})
+test("legacy image text updates to native runs in place and unchanged imports send no writes", async () => {
+  const { emptyState } = await import("./.compiled/design.mjs")
+  const label = mixedLabel(),
+    screen = node("screen", "FRAME", { children: [label] })
+  const design = await readDesign(api, [screen], undefined, { liveAutoLayout: true })
+  const legacy = structuredClone(design)
+  legacy.units[0].root.children[0] = {
+    id: label.id,
+    type: "IMAGE",
+    props: { name: label.name, x: 0, y: 0, width: 80, height: 20 },
+    children: [],
+  }
+  const studio = new FakeStudio(),
+    state = emptyState()
+  await importDesign(studio, legacy, state)
+  const sceneId = state.scopes["scene:screen"].id
+  const { report } = await importDesign(studio, design, state)
+  assert.deepEqual(report.errors, [])
+  assert.deepEqual(report.conflicts, [])
+  assert.equal(state.scopes["scene:screen"].id, sceneId)
+  assert.equal(state.scopes["scene:screen"].nodes[label.id].type, "CONTAINER")
+  assert.equal(
+    [...studio.nodes.values()].some((n) => n.type === "IMAGE"),
+    false,
+  )
+  assert.equal(studio.scenes.size, 1)
+  assert.equal((await importDesign(studio, design, state)).report.calls, 0)
+})
+test("overridden mixed text and uppercase component labels resolve to editable native text", async () => {
+  const main = node("master", "COMPONENT", { children: [mixedLabel()] })
+  const instance = node("instance", "INSTANCE", {
+    children: [mixedLabel({ id: "Iinstance;required", characters: "Another*" })],
+    overrides: [],
+    getMainComponentAsync: async () => main,
+  })
+  const design = await readDesign(api, [instance], undefined, { liveAutoLayout: true })
+  assert.equal(design.components.length, 0)
+  assert.equal(design.units[0].root.children[0].children[0].type, "TEXT")
+  assert.equal(design.assets.length, 0)
+  const source = truncatedText("caps", { textCase: "UPPER", textTruncation: "DISABLED" })
+  main.children = [source]
+  source.parent = main
+  instance.children = [
+    truncatedText("Iinstance;caps", {
+      textCase: "UPPER",
+      textTruncation: "DISABLED",
+      characters: "hello",
+    }),
+  ]
+  instance.children[0].parent = instance
+  const caps = await readDesign(api, [instance])
+  assert.equal(caps.units[0].root.overrides[0].props.text, "HELLO")
 })
 test("Smart Animate links and delays map to native transitions in seconds", async () => {
   const rect = node("button", "RECTANGLE", {
@@ -253,6 +517,87 @@ test("native text uses the canonical font field and converts pixel line-height t
   assert.equal(props.letterSpacing, 5)
   assert.equal(props.fillEnabled, false)
   assert.equal(props.sizeMode, "FIXED_SIZE")
+})
+test("numeric weights and variable axes remain in source metadata without unsupported native properties", async () => {
+  const source = truncatedText("variable", {
+    textTruncation: "DISABLED",
+    fontWeight: 700,
+    fontName: { family: "Gilroy", style: "Regular", variationSettings: { wght: 700, wdth: 90 } },
+  })
+  const text = (await readDesign(api, [source])).units[0].root
+  assert.deepEqual(text.font, {
+    family: "Gilroy",
+    style: "Regular",
+    weight: 700,
+    variationSettings: { wght: 700, wdth: 90 },
+  })
+  assert.equal(text.props.fontWeight, undefined)
+})
+test("mixed run weights survive even when both runs share the same family and named style", async () => {
+  const label = mixedLabel({ fontWeight: mixed })
+  const segments = label.getStyledTextSegments()
+  segments[0].fontWeight = 400
+  segments[1].fontWeight = 700
+  label.getStyledTextSegments = () => segments
+  const text = (await readDesign(api, [label])).units[0].root
+  assert.deepEqual(
+    text.children.map((n) => n.font.weight),
+    [400, 700],
+  )
+  assert.ok(text.children.every((n) => n.type === "TEXT"))
+})
+test("an instance with a different numeric weight keeps its actual weight instead of its master's", async () => {
+  const main = node("weight-master", "COMPONENT", {
+    children: [truncatedText("weight-source", { fontWeight: 400, textTruncation: "DISABLED" })],
+  })
+  const instance = node("weight-instance", "INSTANCE", {
+    children: [
+      truncatedText("Iweight-instance;weight-source", {
+        fontWeight: 700,
+        textTruncation: "DISABLED",
+      }),
+    ],
+    overrides: [],
+    getMainComponentAsync: async () => main,
+  })
+  const design = await readDesign(api, [instance])
+  assert.equal(design.components.length, 0)
+  assert.equal(design.units[0].root.children[0].font.weight, 700)
+})
+test("installed weight resolution updates the existing text ID and remains a zero-write no-op afterward", async () => {
+  const { emptyState } = await import("./.compiled/design.mjs")
+  const faces = JSON.parse(
+    await readFile(new URL("./fixtures/installed-font-faces.json", import.meta.url), "utf8"),
+  )
+  const studio = new FakeStudio(),
+    state = emptyState(),
+    tool = studio.tool.bind(studio)
+  studio.tool = async (name, args) =>
+    name === "query_design_system"
+      ? { ...(await tool(name, args)), availableFonts: [...new Set(faces.map((f) => f.family))] }
+      : tool(name, args)
+  const label = truncatedText("label", {
+      fontName: { family: "Gilroy", style: "Semibold" },
+      fontWeight: 600,
+      textTruncation: "DISABLED",
+    }),
+    screen = node("screen", "FRAME", { children: [label] })
+  const design = await readDesign(api, [screen])
+  assert.deepEqual(
+    (await importDesign(studio, design, state, { fontFaces: faces })).report.errors,
+    [],
+  )
+  const scope = state.scopes["scene:screen"],
+    id = scope.nodes.label.id
+  assert.equal(studio.nodes.get(id).props.font, "Gilroy-SemiBold")
+  label.fontName = { family: "Gilroy", style: "Medium" }
+  label.fontWeight = 500
+  const changed = await readDesign(api, [screen])
+  const result = await importDesign(studio, changed, state, { fontFaces: faces })
+  assert.deepEqual(result.report.conflicts, [])
+  assert.equal(scope.nodes.label.id, id)
+  assert.equal(studio.nodes.get(id).props.font, "Gilroy-Medium")
+  assert.equal((await importDesign(studio, changed, state, { fontFaces: faces })).report.calls, 0)
 })
 
 test("raster bytes are read once and image opacity and rounded corners survive", async () => {

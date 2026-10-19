@@ -133,7 +133,8 @@ export class FakeStudio {
           p.layerIdList.forEach((id) => this.remove(id))
           r = { success: true }
         } else if (p.action === "reorder") {
-          if (p.newParentId) this.nodes.get(p.layerIdList[0]).parent = p.newParentId
+          // Studio interprets an omitted parent as the artboard root, including index-only reorders.
+          this.nodes.get(p.layerIdList[0]).parent = p.newParentId
           r = { success: true }
         } else if (p.action === "instance_override") {
           r = { success: true }

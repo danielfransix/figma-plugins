@@ -12,7 +12,9 @@ const preview = Buffer.from(
 ).toString("base64")
 
 test("browser panel: opaque bootstrap, localhost transport, saved links, and zero-write re-import", async (t) => {
-  const server = createPanelServer()
+  const server = createPanelServer({
+    fontCatalogFile: new URL("./fixtures/installed-font-faces.json", import.meta.url),
+  })
   await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve))
   t.after(() => new Promise((resolve) => server.close(resolve)))
   const origin = `http://127.0.0.1:${server.address().port}`
@@ -32,6 +34,30 @@ test("browser panel: opaque bootstrap, localhost transport, saved links, and zer
       "list_contexts",
       "studio_session_init",
     ]
+  const originalTool = fake.tool.bind(fake)
+  fake.tool = async (name, args) => {
+    const result = await originalTool(name, args)
+    if (name === "query_design_system")
+      result.availableFonts = ["Inter", "Gilroy", "Gilroy SemiBold"]
+    return result
+  }
+  const sourceFixture = fixture()
+  sourceFixture.root.children.push({
+    id: "weighted-label",
+    type: "TEXT",
+    font: { family: "Gilroy", style: "Semibold", weight: 600 },
+    props: {
+      name: "Weighted label",
+      text: "Semibold",
+      font: "Gilroy-Semibold",
+      fontSize: 14,
+      x: 0,
+      y: 80,
+      width: 100,
+      height: 21,
+    },
+    children: [],
+  })
   let approvals = 0,
     reportedTitle = "Browser QA",
     reportedPath = null,
@@ -192,7 +218,7 @@ test("browser panel: opaque bootstrap, localhost transport, saved links, and zer
       })
       plugin.src = `data:text/html;charset=utf-8,${encodeURIComponent(html)}`
     },
-    { html: bootstrap, design: fixture().design },
+    { html: bootstrap, design: sourceFixture.design },
   )
   const bootstrapFrame = page.frameLocator("#plugin").frameLocator("iframe").frameLocator("iframe")
   const panel = bootstrapFrame.frameLocator("#panel")
@@ -258,6 +284,12 @@ test("browser panel: opaque bootstrap, localhost transport, saved links, and zer
     "completed duration stays frozen",
   )
   assert.equal(await page.evaluate(() => window.qa.lastRun.createComponents), false)
+  assert.equal(
+    await page.evaluate(
+      () => window.qa.state.scopes["scene:screen"].nodes["weighted-label"].props.font,
+    ),
+    "Gilroy-SemiBold",
+  )
   assert.equal(await page.evaluate(() => window.qa.lastRun.clipTruncatedText), false)
   await panel.locator("#clip-truncated-text").check()
   await panel.locator("#create-components").check()
@@ -486,6 +518,8 @@ test("browser panel: opaque bootstrap, localhost transport, saved links, and zer
   const downloaded = page.waitForEvent("download")
   await panel.locator("#download-report").click()
   const diagnostic = JSON.parse(await readFile(await (await downloaded).path(), "utf8"))
+  const pkg = JSON.parse(await readFile(new URL("../package.json", import.meta.url), "utf8"))
+  assert.equal(diagnostic.pluginVersion, pkg.version)
   assert.equal(diagnostic.design, null, "a failed read must not export the previous selection")
   assert.equal(diagnostic.report, null, "a failed read must not export the previous result")
   assert.deepEqual(diagnostic.failure, failure)
@@ -678,4 +712,80 @@ test("recorded grouped logo renders at its Figma position and preserves fraction
     Math.abs(masks[0].weight - masks[1].weight) / masks[0].weight < 0.05,
     "glyph coverage must not shrink with rounded SVG viewports",
   )
+})
+
+test("panel spacing, dropdowns, keyboard switches and footer stay usable in both themes", async (t) => {
+  const server = createPanelServer()
+  await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve))
+  t.after(() => new Promise((resolve) => server.close(resolve)))
+  const browser = await chromium.launch({ headless: true })
+  t.after(() => browser.close())
+  const page = await browser.newPage({
+    viewport: { width: 400, height: 640 },
+    deviceScaleFactor: 1.25,
+  })
+  await page.goto("http://127.0.0.1:" + server.address().port)
+  await page.evaluate(() =>
+    window.postMessage(
+      { pluginMessage: { type: "connection-settings", settings: { disconnected: true } } },
+      "*",
+    ),
+  )
+  await page
+    .locator("#status-text")
+    .filter({ hasText: /^Disconnected$/ })
+    .waitFor()
+  for (const width of [320, 400, 600]) {
+    await page.setViewportSize({ width, height: 640 })
+    for (const colorScheme of ["light", "dark"]) {
+      await page.evaluate(
+        (colorScheme) => window.postMessage({ figmaTheme: { colorScheme, variables: {} } }, "*"),
+        colorScheme,
+      )
+      await page.waitForFunction(
+        (color) => document.documentElement.style.colorScheme === color,
+        colorScheme,
+      )
+      for (const value of ["selection", "page", "file"]) {
+        await page.getByRole("combobox", { name: "Import content" }).selectOption(value)
+        const layout = await page.evaluate(() => {
+          const select = document.getElementById("import-scope").getBoundingClientRect(),
+            icon = document.querySelector(".select-icon").getBoundingClientRect()
+          return {
+            offset: Math.abs(select.y + select.height / 2 - icon.y - icon.height / 2),
+            inset: select.right - icon.right,
+            overflow:
+              document.documentElement.scrollWidth > innerWidth ||
+              document.querySelector("main").scrollWidth > innerWidth,
+          }
+        })
+        assert.ok(layout.offset < 0.5)
+        assert.equal(layout.inset, 10)
+        assert.equal(layout.overflow, false)
+      }
+      await page.locator("summary").click()
+      const toggle = page.locator("#live-auto-layout")
+      assert.equal(await toggle.isChecked(), true)
+      await toggle.focus()
+      await page.keyboard.press("Space")
+      assert.equal(await toggle.isChecked(), false)
+      await page.keyboard.press("Space")
+      assert.equal(await toggle.isChecked(), true)
+      const offsets = await page.locator(".property-row").evaluateAll((rows) =>
+        rows.map((row) => {
+          const title = row.querySelector(".property-title").getBoundingClientRect(),
+            toggle = row.querySelector(".switch").getBoundingClientRect()
+          return Math.abs(title.y + title.height / 2 - toggle.y - toggle.height / 2)
+        }),
+      )
+      assert.ok(offsets.every((n) => n < 0.5))
+      await page.locator("#switch-target-btn").scrollIntoViewIfNeeded()
+      const button = await page.locator("#switch-target-btn").boundingBox(),
+        footer = await page.locator("footer").boundingBox()
+      assert.ok(button.y + button.height <= footer.y)
+      assert.equal(await page.locator("#fit-canvas").isChecked(), true)
+      assert.equal(await page.locator("#clip-truncated-text").isChecked(), true)
+      await page.locator("summary").click()
+    }
+  }
 })

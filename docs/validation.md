@@ -5,10 +5,11 @@ build `c6e3e3596a-dirty@2026-10-06T04:22:26.030Z`. This is the tested compatibil
 
 ## Automated checks
 
-The current revision passed **132 offline/browser checks**. The importer revision preceding the
-Disconnect UI passed **10 live Studio checks**, including transitive shared-master conflict
-protection and explicit scene routing for global variables. Disconnect is covered by the nested
-headless-browser and sandbox tests; its final manual Figma desktop check remains pending.
+The current revision passed **164 offline/browser checks** and **11 live Studio checks** in an
+approved unsaved scratch Pie on October 19. Live coverage includes transitive shared-master
+conflict protection, explicit scene routing, native text faces and sizing, clipping and parent moves.
+Disconnect is covered by nested headless-browser and sandbox tests; its final manual Figma desktop
+check remains pending.
 TypeScript checks, final builds, formatting, and dependency audit also pass. The extracted Windows
 package's included runtime, asset checksums, and localhost helper have been smoke-tested.
 
@@ -44,7 +45,86 @@ overrides, unchanged imports with zero writes, master updates preserving IDs, se
 updates, manual-edit protection, and cleanup. It also imports the real Figma reader snapshot.
 Run live files sequentially because they share one approved Studio context.
 
+## October 19 deep QA, version 0.3.4
+
+The expanded Windows suite passed 164 checks, including the real reader, scoped updates,
+components, variables, cancellation, timeouts, conflict protection, persistence and the nested
+browser UI. Four additional defects were reproduced and fixed: a successful parent-only move
+previously retained its old saved parent, and text without visible fills could become black.
+The live run also exposed index-only sibling reorders detaching children to the scene root.
+Every sibling reorder now pins its parent, and reparented layers restore source geometry.
+Move acknowledgements now update saved parent links independently of property edits; rejected
+moves retain their old parent even when a property edit succeeds. Empty or hidden text fills
+remain transparent native editable text in both clipping modes. Regression tests cover repeated
+moves back and forth, rejection and retry. A transient missing component thumbnail was also reproduced in a full native run. Missing
+thumbnails now consume the existing six-attempt read budget instead of immediately ending
+verification. Matching captures are still required; six missing captures leave the scope protected,
+and no write is retried. Capture failures remain in diagnostics. The Studio handshake now identifies the same version
+as the package, panel and diagnostic, guarded by release-consistency checks. Packaging now
+rebuilds and type-checks the bundles first to prevent shipping stale compiled code. Live harnesses
+and the benchmark require the active scratch Pie to match a supplied pinned context.
+
+Fault injection interrupts every storage write position across snapshot updates, incremental
+journals, fresh resets and journal compaction. Each case retains either the previous complete
+state or the complete committed update, preserves a second target, and permits a safe retry.
+Headless browser checks cover 18 dropdown/theme/width combinations at 320, 400 and 600 pixels,
+aligned switches, keyboard toggling, default settings and access to controls above the footer.
+The local helper returns sanitized metadata for 549 installed faces on this PC.
+
+The candidate reader also ran read-only on source frame 1:386 in the supplied time-and-attendance
+file. Its visible output includes 51 native text layers; the six distinct source font styles all
+resolve to verified installed identifiers without font substitution notes. The three required step
+labels retain Fill outer slots of width 160 and native Auto Width/Hug text runs. No source text is
+exported as artwork. Hidden source layers are omitted and unsupported non-text artwork remains
+eligible for image export. This check does not exercise Figma desktop clientStorage or Studio's
+text rendering.
+
+A simulated replay of diagnostic-3 creates 2,462 native model layers in 24 write requests,
+transfers 2,377,020 write bytes and 26 checkpoint patches containing 2,408,711 serialized bytes,
+restores every saved link, and performs zero writes on an unchanged re-import. It has no import
+errors or conflicts. The source's unsupported-feature notes remain visible; a passing model replay
+is not a native timing measurement or proof of pixel fidelity. The large-scene Studio preview
+limitation remains a release blocker. The updated importer passed 11 live checks in a fresh approved unsaved scratch Pie: component
+creation and overrides, zero-write re-import, stable IDs, shared-master and child updates, manual
+conflict protection, and the recorded Figma snapshot. The new typography check verifies native
+Auto Width/Hug run widths, long text behind a 120-pixel clipping viewport, all six actual native
+font identifiers, repeated parent moves with unchanged IDs and correct local coordinates, and
+zero-write unchanged import. Its captured preview was inspected: weight differences, colored
+asterisks and clipping render correctly. Temporary test scenes, masters and variables are removed
+in finally blocks. Desktop plugin clientStorage and production-file speed/fidelity remain separate
+checks; these direct Studio tests do not establish them.
+
 ## Single-line text clipping
+
+Version 0.3.3 fixes font-face matching. The reported screen uses Gilroy Regular (400), Medium
+(500), Semibold (600), Bold (700), and Circular Std Book (450) and Bold (700). Studio's installed
+metadata exposes several of those weights as separate Windows families with a Regular style.
+The previous guessed `Gilroy-Semibold` identifier misses the installed `Gilroy-SemiBold` face;
+Studio's resolver then silently selects Gilroy Regular. Circular Std also differs from Windows'
+CircularStd family spelling. Source font requests now retain numeric weights and variable axes;
+the helper exposes sanitized Studio font metadata and the importer chooses an actual installed
+identifier. Cached faces are checked against the connected Studio family catalog. Missing or
+approximate weights, unverified faces and unsupported variable axes are reported explicitly.
+The helper never exposes font binaries or font paths. Tests cover the six real source styles,
+case/spacing aliases, variable weights, italic faces, stale catalogs, source metadata, ordered
+native ID-preserving updates, zero-write re-import, helper sanitization and the complete browser
+path from a Semibold source request to the installed face. Final rendering remains a user check.
+
+Version 0.3.2 removes text artwork exports completely. Read-only inspection of the supplied
+time-and-attendance screen found three 160-pixel Fill text layers with mixed colors and truncation
+disabled. Their old outlined image bounds were approximately 136.12, 99.42 and 74.06 pixels wide;
+applying Fill to those images stretched the short labels. The importer now creates native editable
+text runs for the label and required asterisk, keeping Fill on the outer layout slot and Hug/
+Auto Width on the runs. The source metadata is recorded in `test/fixtures/step-label-source.json`
+without text SVGs. Tests cover both clipping states, both live-layout states, red-asterisk colors,
+native fonts and spacing, opacity and rotation, legacy-image replacement, zero-write unchanged
+imports, case-transformed component overrides, and complex ancestors retaining editable text.
+Missing text-run metadata fails explicitly. Unsupported text appearance and mixed multi-line
+styling are simplified with visible notes; they do not trigger artwork exports. Native Studio
+rendering still needs a user retry. The compiled reader was also run read-only against the real
+required-label component through the Figma connection: all three labels became two native text
+runs with Gilroy Regular, their original two colors and Auto Width/Hug sizing; their outer slots
+kept Fill width 160. The three remaining image assets were non-text vector icons.
 
 Version 0.3.1 adds **Clip truncated text**, enabled by default. Reader tests cover Fill-width
 clipping viewports, editable Auto Width content, fixed-height and legacy truncation, alignment,

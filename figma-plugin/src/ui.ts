@@ -520,7 +520,7 @@ element("download-report").addEventListener("click", () => {
           JSON.stringify(
             {
               version: 1,
-              pluginVersion: "0.3.1",
+              pluginVersion: "0.3.4",
               design: lastDesign,
               report: lastReport,
               failure: lastFailure,
@@ -633,11 +633,27 @@ window.addEventListener("message", (event) => {
             : null
         linkSaveProtocol = journal ? "incremental-journal" : "legacy-snapshot"
         if (runFresh) element<HTMLInputElement>("force-fresh").checked = false
+        let fontFaces = []
+        if (!runVerification) {
+          try {
+            const response = await fetch("/font-catalog", {
+              cache: "no-store",
+              signal: AbortSignal.any([cancellation.signal, AbortSignal.timeout(2000)]),
+            })
+            if (response.ok) {
+              const catalog = await response.json()
+              if (Array.isArray(catalog.fonts)) fontFaces = catalog.fonts
+            }
+          } catch (error) {
+            if (cancellation.signal.aborted) throw error
+          }
+        }
         const result = await importDesign(
           studio,
           m.design,
           state,
           {
+            fontFaces,
             verifyOnly: runVerification,
             newImport: runFresh,
             resolveVariableCollisions: chooseVariables,

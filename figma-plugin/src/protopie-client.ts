@@ -69,7 +69,7 @@ export async function initializeSession(endpoint: string, signal?: AbortSignal):
       params: {
         protocolVersion: "2025-06-18",
         capabilities: {},
-        clientInfo: { name: "figma-to-protopie", version: "0.2.0" },
+        clientInfo: { name: "figma-to-protopie", version: "0.3.4" },
       },
     },
     signal,

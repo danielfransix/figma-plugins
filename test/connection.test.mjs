@@ -1,5 +1,6 @@
 import { test } from "node:test"
 import assert from "node:assert/strict"
+import { readFile } from "node:fs/promises"
 import {
   acquireConnection,
   contextDisplayName,
@@ -53,6 +54,15 @@ function normalResponse(name, args) {
     return { value: { _context: { contextId: args.contextId }, scenes: [] } }
   throw new Error(`Unexpected tool ${name}`)
 }
+
+test("Studio initialization identifies the same release as the package and panel", async (t) => {
+  const calls = mockStudio(t, normalResponse)
+  await acquireConnection(endpoint, null, () => {})
+  const pkg = JSON.parse(await readFile(new URL("../package.json", import.meta.url), "utf8"))
+  const html = await readFile(new URL("../figma-plugin/ui.html", import.meta.url), "utf8")
+  assert.equal(calls.find((c) => c.method === "initialize").params.clientInfo.version, pkg.version)
+  assert.ok(html.includes(`<span>v${pkg.version}</span>`))
+})
 
 test("reopening reuses the grant without approval and keeps the approved Pie despite a tab switch", async (t) => {
   const calls = mockStudio(t, normalResponse)

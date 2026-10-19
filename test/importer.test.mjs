@@ -3,6 +3,126 @@ import assert from "node:assert/strict"
 import { importDesign, componentOrder } from "./.compiled/importer.mjs"
 import { emptyState } from "./.compiled/design.mjs"
 import { FakeStudio, fixture } from "./fixtures/studio.mjs"
+
+test("a missing native thumbnail consumes the bounded read budget without retrying writes", async () => {
+  const studio = new FakeStudio(),
+    state = emptyState(),
+    { design } = fixture()
+  const view = studio.view.bind(studio)
+  let captures = 0
+  studio.view = async (...args) => {
+    if (++captures === 2)
+      throw Error(
+        "Studio could not produce a visual baseline. No existing content was overwritten.",
+      )
+    return view(...args)
+  }
+  const result = await importDesign(studio, design, state)
+  assert.deepEqual(result.report.errors, [])
+  assert.equal(captures, 3)
+  assert.equal(result.report.verification[0].status, "verified")
+  assert.equal(result.report.verification[0].captureErrors.length, 1)
+  assert.equal(studio.scenes.size, 1)
+  assert.equal(studio.nodes.size, Object.keys(state.scopes["scene:screen"].nodes).length)
+  assert.equal((await importDesign(studio, design, state)).report.calls, 0)
+})
+
+test("six missing native previews stop verification and protect the acknowledged content", async () => {
+  const studio = new FakeStudio(),
+    state = emptyState(),
+    { design } = fixture()
+  let captures = 0
+  studio.view = async () => {
+    captures++
+    throw Error("Studio could not produce a visual baseline. No existing content was overwritten.")
+  }
+  const result = await importDesign(studio, design, state)
+  assert.equal(captures, 6)
+  assert.ok(result.report.verificationPending.length)
+  assert.equal(result.report.verification[0].captureErrors.length, 6)
+  assert.equal(state.scopes["scene:screen"].fingerprint, "")
+  assert.equal(studio.locked, false)
+  assert.equal((await importDesign(studio, design, state)).report.calls, 0)
+})
+
+test("restoring nested sibling order explicitly retains its native parent", async () => {
+  const studio = new FakeStudio(),
+    state = emptyState(),
+    { design, root, node } = fixture()
+  const first = node("first", "RECT"),
+    second = node("second", "RECT")
+  const parent = node("nested", "CONTAINER", {}, [first, second])
+  root.children = [parent]
+  await importDesign(studio, design, state)
+  const records = state.scopes["scene:screen"].nodes
+  const oldIds = [records[first.id].id, records[second.id].id]
+  parent.children.reverse()
+  const result = await importDesign(studio, design, state)
+  assert.deepEqual(result.report.errors, [])
+  for (const id of oldIds) assert.equal(studio.nodes.get(id).parent, records[parent.id].id)
+  assert.deepEqual(records[parent.id].order, [second.id, first.id])
+  assert.equal((await importDesign(studio, design, state)).report.calls, 0)
+})
+
+test("moving an unchanged layer between containers persists its parent and can move it back", async () => {
+  const studio = new FakeStudio(),
+    state = emptyState(),
+    { design, root, node } = fixture()
+  const text = node("moving-text", "TEXT", { text: "Keep my ID" })
+  const left = node("left", "CONTAINER", {}, [text]),
+    right = node("right", "CONTAINER")
+  root.children = [left, right]
+  await importDesign(studio, design, state)
+  const id = state.scopes["scene:screen"].nodes[text.id].id
+  for (const [from, to] of [
+    [left, right],
+    [right, left],
+    [left, right],
+  ]) {
+    from.children = []
+    to.children = [text]
+    const result = await importDesign(studio, design, state)
+    assert.deepEqual(result.report.errors, [])
+    const records = state.scopes["scene:screen"].nodes
+    assert.equal(records[text.id].id, id)
+    assert.equal(records[text.id].parent, to.id)
+    assert.equal(studio.nodes.get(id).parent, records[to.id].id)
+    assert.equal((await importDesign(studio, design, state)).report.calls, 0)
+  }
+})
+
+test("a rejected move never saves a new parent from a successful property edit", async () => {
+  const studio = new FakeStudio(),
+    state = emptyState(),
+    { design, root, node } = fixture()
+  const text = node("moving-text", "TEXT", { text: "Before" })
+  const left = node("left", "CONTAINER", {}, [text]),
+    right = node("right", "CONTAINER")
+  root.children = [left, right]
+  await importDesign(studio, design, state)
+  left.children = []
+  right.children = [text]
+  text.props.text = "After"
+  const write = studio.write.bind(studio)
+  studio.write = async (operations) => {
+    const results = []
+    for (const op of operations) {
+      if (op.input.action === "reorder" && op.input.newParentId)
+        results.push({ success: false, errors: [{ error: "Move rejected" }] })
+      else results.push(...(await write([op])).results)
+    }
+    return { results, failureCount: results.filter((r) => r.success === false).length }
+  }
+  const result = await importDesign(studio, design, state)
+  assert.ok(result.report.errors.some((e) => /Move rejected/.test(e)))
+  assert.equal(state.scopes["scene:screen"].nodes[text.id].parent, left.id)
+  studio.write = write
+  const retried = await importDesign(studio, design, state)
+  assert.deepEqual(retried.report.errors, [])
+  const records = state.scopes["scene:screen"].nodes
+  assert.equal(records[text.id].parent, right.id)
+  assert.equal(studio.nodes.get(records[text.id].id).parent, records[right.id].id)
+})
 test("unchanged imports write nothing; changed layers keep their ids", async () => {
   const studio = new FakeStudio(),
     state = emptyState(),

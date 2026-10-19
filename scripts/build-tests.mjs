@@ -4,6 +4,7 @@ await build({
     "connection",
     "protopie-client",
     "design",
+    "fonts",
     "read-design",
     "storage",
     "checkpoint",
