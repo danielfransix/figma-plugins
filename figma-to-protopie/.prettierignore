@@ -1,0 +1,10 @@
+node_modules
+.scratch-qa
+test/.compiled
+figma-plugin/code.js
+figma-plugin/ui.js
+dist
+build
+package-lock.json
+docs/feasibility.md
+AGENTS.md

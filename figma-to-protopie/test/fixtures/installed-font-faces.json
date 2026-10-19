@@ -1,0 +1,198 @@
+[
+  {
+    "family": "CircularStd",
+    "style": "Regular",
+    "weight": 900,
+    "italic": false,
+    "postscriptName": "CircularStd-BlackItalic"
+  },
+  {
+    "family": "CircularStd",
+    "style": "Regular",
+    "weight": 700,
+    "italic": false,
+    "postscriptName": "CircularStd-Bold"
+  },
+  {
+    "family": "CircularStd",
+    "style": "Regular",
+    "weight": 700,
+    "italic": false,
+    "postscriptName": "CircularStd-BoldItalic"
+  },
+  {
+    "family": "CircularStd",
+    "style": "Regular",
+    "weight": 450,
+    "italic": false,
+    "postscriptName": "CircularStd-Book"
+  },
+  {
+    "family": "CircularStd",
+    "style": "Regular",
+    "weight": 450,
+    "italic": false,
+    "postscriptName": "CircularStd-BookItalic"
+  },
+  {
+    "family": "CircularStd",
+    "style": "Regular",
+    "weight": 500,
+    "italic": false,
+    "postscriptName": "CircularStd-Medium"
+  },
+  {
+    "family": "CircularStd",
+    "style": "Regular",
+    "weight": 500,
+    "italic": false,
+    "postscriptName": "CircularStd-MediumItalic"
+  },
+  {
+    "family": "CircularStd",
+    "style": "Regular",
+    "weight": 900,
+    "italic": false,
+    "postscriptName": "CircularStd-Black"
+  },
+  {
+    "family": "Gilroy Thin",
+    "style": "Regular",
+    "weight": 250,
+    "italic": false,
+    "postscriptName": "Gilroy-Thin"
+  },
+  {
+    "family": "Gilroy UltraLight",
+    "style": "Regular",
+    "weight": 250,
+    "italic": false,
+    "postscriptName": "Gilroy-UltraLight"
+  },
+  {
+    "family": "Gilroy Thin Italic",
+    "style": "Regular",
+    "weight": 250,
+    "italic": true,
+    "postscriptName": "Gilroy-ThinItalic"
+  },
+  {
+    "family": "Gilroy UltraLight Italic",
+    "style": "Regular",
+    "weight": 250,
+    "italic": true,
+    "postscriptName": "Gilroy-UltraLightItalic"
+  },
+  {
+    "family": "Gilroy Light",
+    "style": "Regular",
+    "weight": 300,
+    "italic": false,
+    "postscriptName": "Gilroy-Light"
+  },
+  {
+    "family": "Gilroy Light Italic",
+    "style": "Regular",
+    "weight": 300,
+    "italic": true,
+    "postscriptName": "Gilroy-LightItalic"
+  },
+  {
+    "family": "Gilroy",
+    "style": "Regular",
+    "weight": 400,
+    "italic": false,
+    "postscriptName": "Gilroy-Regular"
+  },
+  {
+    "family": "Gilroy Italic",
+    "style": "Regular",
+    "weight": 400,
+    "italic": true,
+    "postscriptName": "Gilroy-RegularItalic"
+  },
+  {
+    "family": "Gilroy Medium",
+    "style": "Regular",
+    "weight": 500,
+    "italic": false,
+    "postscriptName": "Gilroy-Medium"
+  },
+  {
+    "family": "Gilroy Medium Italic",
+    "style": "Regular",
+    "weight": 500,
+    "italic": true,
+    "postscriptName": "Gilroy-MediumItalic"
+  },
+  {
+    "family": "Gilroy SemiBold",
+    "style": "Regular",
+    "weight": 600,
+    "italic": false,
+    "postscriptName": "Gilroy-SemiBold"
+  },
+  {
+    "family": "Gilroy SemiBold Italic",
+    "style": "Regular",
+    "weight": 600,
+    "italic": true,
+    "postscriptName": "Gilroy-SemiBoldItalic"
+  },
+  {
+    "family": "Gilroy Bold",
+    "style": "Regular",
+    "weight": 700,
+    "italic": false,
+    "postscriptName": "Gilroy-Bold"
+  },
+  {
+    "family": "Gilroy Bold Italic",
+    "style": "Regular",
+    "weight": 700,
+    "italic": true,
+    "postscriptName": "Gilroy-BoldItalic"
+  },
+  {
+    "family": "Gilroy ExtraBold",
+    "style": "Regular",
+    "weight": 800,
+    "italic": false,
+    "postscriptName": "Gilroy-ExtraBold"
+  },
+  {
+    "family": "Gilroy ExtraBold Italic",
+    "style": "Regular",
+    "weight": 800,
+    "italic": true,
+    "postscriptName": "Gilroy-ExtraBoldItalic"
+  },
+  {
+    "family": "Gilroy Black",
+    "style": "Regular",
+    "weight": 900,
+    "italic": false,
+    "postscriptName": "Gilroy-Black"
+  },
+  {
+    "family": "Gilroy Heavy",
+    "style": "Regular",
+    "weight": 900,
+    "italic": false,
+    "postscriptName": "Gilroy-Heavy"
+  },
+  {
+    "family": "Gilroy Black Italic",
+    "style": "Regular",
+    "weight": 900,
+    "italic": true,
+    "postscriptName": "Gilroy-BlackItalic"
+  },
+  {
+    "family": "Gilroy Heavy Italic",
+    "style": "Regular",
+    "weight": 900,
+    "italic": true,
+    "postscriptName": "Gilroy-HeavyItalic"
+  }
+]

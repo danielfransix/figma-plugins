@@ -1,0 +1,772 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Figma to ProtoPie</title>
+    <style>
+      @font-face {
+        font-family: "Plus Jakarta Sans";
+        src: url("/fonts/plus-jakarta-sans.ttf") format("truetype");
+        font-weight: 200 800;
+        font-style: normal;
+        font-display: swap;
+      }
+      :root {
+        color-scheme: light dark;
+        --color-bg: var(--figma-color-bg, light-dark(#ffffff, #2c2c2c));
+        --color-bg-secondary: var(--figma-color-bg-secondary, light-dark(#f5f5f5, #383838));
+        --color-bg-hover: var(--figma-color-bg-hover, light-dark(#f0f0f0, #333333));
+        --color-border: var(--figma-color-border, light-dark(#e6e6e6, #444444));
+        --color-border-strong: var(--figma-color-border-strong, light-dark(#b3b3b3, #666666));
+        --color-text: var(--figma-color-text, light-dark(#1e1e1e, #ffffff));
+        --color-text-secondary: var(--figma-color-text-secondary, light-dark(#666666, #b3b3b3));
+        --color-text-tertiary: var(--figma-color-text-tertiary, light-dark(#808080, #a0a0a0));
+        --color-text-onbrand: var(--figma-color-text-onbrand, #ffffff);
+        --color-bg-brand: var(--figma-color-bg-brand, #0c8ce9);
+        --color-bg-brand-hover: var(--figma-color-bg-brand-hover, #007be5);
+        --color-danger: var(--figma-color-text-danger, light-dark(#c4381c, #ffafa3));
+        --color-warning: var(--figma-color-text-warning, light-dark(#946200, #e5c17b));
+        --color-success: var(--figma-color-text-success, light-dark(#18794e, #85d6a2));
+        --font-title-size: 12px;
+        --font-body-size: 11px;
+        --radius-sm: 4px;
+        --radius-md: 6px;
+        font:
+          var(--font-body-size)/16px "Plus Jakarta Sans",
+          Inter,
+          system-ui,
+          sans-serif;
+      }
+      *,
+      *::before,
+      *::after {
+        box-sizing: border-box;
+      }
+      html,
+      body {
+        margin: 0;
+        width: 100%;
+        height: 100%;
+      }
+      body {
+        display: flex;
+        flex-direction: column;
+        background: var(--color-bg);
+        color: var(--color-text);
+      }
+      h1,
+      h2,
+      p {
+        margin: 0;
+      }
+      h1 {
+        font-size: var(--font-title-size);
+        line-height: 16px;
+        font-weight: 600;
+      }
+      h2,
+      .section-label {
+        font-size: var(--font-body-size);
+        line-height: 16px;
+        font-weight: 500;
+      }
+      .content-header {
+        padding: 16px;
+        border-bottom: 1px solid var(--color-border);
+        flex: 0 0 auto;
+      }
+      .header-title {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        margin-bottom: 6px;
+      }
+      .header-icon {
+        width: 16px;
+        height: 16px;
+        flex: 0 0 auto;
+      }
+      .helper,
+      small {
+        color: var(--color-text-secondary);
+        font-size: var(--font-body-size);
+        line-height: 16px;
+      }
+      small {
+        display: block;
+      }
+      .panel-content {
+        flex: 1;
+        min-height: 0;
+        overflow-y: auto;
+        overscroll-behavior: contain;
+      }
+      .section {
+        padding: 16px;
+      }
+      .section + .section,
+      .settings + .section,
+      .settings {
+        border-top: 1px solid var(--color-border);
+      }
+      .section-label {
+        display: block;
+        margin-bottom: 8px;
+      }
+      button,
+      input,
+      select {
+        font: inherit;
+      }
+      button {
+        min-height: 28px;
+        padding: 6px 10px;
+        border: 0;
+        border-radius: var(--radius-md);
+        background: transparent;
+        color: var(--color-text);
+        cursor: pointer;
+        transition: background 100ms;
+      }
+      button:hover:not(:disabled) {
+        background: var(--color-bg-hover);
+      }
+      button:disabled {
+        opacity: 0.4;
+        cursor: default;
+      }
+      button:focus-visible,
+      summary:focus-visible,
+      input:focus-visible,
+      select:focus-visible {
+        outline: 2px solid var(--color-bg-brand);
+        outline-offset: 2px;
+      }
+      .btn-primary {
+        min-height: 32px;
+        width: 100%;
+        background: var(--color-bg-brand);
+        color: var(--color-text-onbrand);
+        font-weight: 600;
+      }
+      .btn-primary:hover:not(:disabled) {
+        background: var(--color-bg-brand-hover);
+      }
+      .btn-secondary {
+        background: var(--color-bg);
+      }
+      .full-width {
+        width: 100%;
+      }
+      .connection-card {
+        padding: 12px;
+        border: 0;
+        border-radius: var(--radius-md);
+        background: var(--color-bg-secondary);
+      }
+      .connection-row {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+      }
+      .status-dot {
+        width: 6px;
+        height: 6px;
+        border-radius: 50%;
+        background: var(--color-text-tertiary);
+        flex: 0 0 auto;
+      }
+      body[data-connection="connected"] .status-dot {
+        background: var(--color-success);
+      }
+      body[data-connection="connecting"] .status-dot,
+      body[data-connection="disconnecting"] .status-dot {
+        background: var(--color-bg-brand);
+      }
+      #status-text {
+        flex: 1;
+        min-width: 0;
+        overflow-wrap: anywhere;
+      }
+      .connection-actions {
+        display: flex;
+        gap: 8px;
+        margin-top: 12px;
+      }
+      .connection-actions button {
+        flex: 1;
+      }
+      #disconnect-note,
+      #connection-name-note {
+        margin-top: 8px;
+      }
+      #first-run-note {
+        padding: 12px;
+        margin-top: 12px;
+        border: 0;
+        border-radius: var(--radius-md);
+        color: var(--color-text-secondary);
+        background: var(--color-bg-secondary);
+      }
+      #first-run-note strong {
+        color: var(--color-text);
+        font-weight: 600;
+      }
+      .field-row {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 16px;
+        margin-bottom: 12px;
+      }
+      .field-row label {
+        flex: 0 0 auto;
+        color: var(--color-text-secondary);
+      }
+      input[type="text"],
+      select {
+        min-height: 28px;
+        color: var(--color-text);
+        border: 0;
+        border-radius: var(--radius-md);
+        background: var(--color-bg-secondary);
+        padding: 6px 10px;
+        min-width: 0;
+      }
+      .select-control {
+        position: relative;
+        flex: 0 1 176px;
+        min-width: 0;
+        max-width: 65%;
+      }
+      .select-control select {
+        appearance: none;
+        width: 100%;
+        height: 28px;
+        padding-inline-end: 34px;
+        text-overflow: ellipsis;
+        cursor: pointer;
+      }
+      .select-icon {
+        position: absolute;
+        inset-inline-end: 10px;
+        top: 50%;
+        transform: translateY(-50%);
+        width: 16px;
+        height: 16px;
+        color: var(--color-text-secondary);
+        pointer-events: none;
+      }
+      select:disabled {
+        opacity: 0.4;
+        cursor: default;
+      }
+      select:disabled + .select-icon {
+        opacity: 0.4;
+      }
+      input[type="text"] {
+        width: 100%;
+        margin-top: 8px;
+        font-family: ui-monospace, Consolas, monospace;
+      }
+      #stop-btn {
+        margin-top: 8px;
+        width: 100%;
+      }
+      #progress {
+        color: var(--color-text-secondary);
+        margin-top: 12px;
+        overflow-wrap: anywhere;
+      }
+      #progress:empty {
+        display: none;
+      }
+      .settings {
+        margin: 0;
+      }
+      summary {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 12px 16px;
+        font-weight: 500;
+        cursor: pointer;
+        list-style: none;
+      }
+      summary::-webkit-details-marker {
+        display: none;
+      }
+      summary::before {
+        content: "";
+        width: 6px;
+        height: 6px;
+        flex: 0 0 auto;
+        border-right: 1px solid var(--color-text-secondary);
+        border-top: 1px solid var(--color-text-secondary);
+        transform: rotate(45deg);
+        margin-right: 2px;
+        transition: transform 100ms;
+      }
+      details[open] > summary::before {
+        transform: rotate(135deg);
+      }
+      summary:hover {
+        background: var(--color-bg-hover);
+      }
+      .settings-content {
+        padding: 0 16px 16px;
+      }
+      .property-row {
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        gap: 16px;
+        padding: 8px 0;
+        cursor: pointer;
+      }
+      .property-copy {
+        min-width: 0;
+      }
+      .property-title {
+        display: block;
+        font-weight: 500;
+        margin-bottom: 4px;
+      }
+      .switch {
+        display: inline-block;
+        position: relative;
+        width: 28px;
+        height: 16px;
+        flex: 0 0 auto;
+      }
+      .switch input {
+        position: absolute;
+        inset: 0;
+        width: 100%;
+        height: 100%;
+        opacity: 0;
+        margin: 0;
+        cursor: pointer;
+      }
+      .switch-track {
+        position: absolute;
+        inset: 0;
+        border-radius: 999px;
+        background: var(--color-border-strong);
+        pointer-events: none;
+        transition: background 100ms;
+      }
+      .switch-thumb {
+        position: absolute;
+        top: 2px;
+        left: 2px;
+        width: 12px;
+        height: 12px;
+        border-radius: 50%;
+        background: #ffffff;
+        transition: transform 100ms;
+      }
+      .property-row:has(input:disabled),
+      .switch input:disabled {
+        cursor: default;
+      }
+      .switch input:disabled + .switch-track {
+        opacity: 0.4;
+      }
+      .switch input:checked + .switch-track {
+        background: var(--color-bg-brand);
+      }
+      .switch input:checked + .switch-track .switch-thumb {
+        transform: translateX(12px);
+      }
+      .switch input:focus-visible + .switch-track {
+        outline: 2px solid var(--color-bg-brand);
+        outline-offset: 2px;
+      }
+      .connection-settings {
+        padding-top: 16px;
+      }
+      .connection-settings > label {
+        display: block;
+        color: var(--color-text-secondary);
+      }
+      #switch-target-btn {
+        margin: 8px 0;
+        width: 100%;
+      }
+      .variable-choice {
+        display: grid;
+        gap: 8px;
+        margin-top: 12px;
+        padding: 12px;
+        background: var(--color-bg-secondary);
+        border-radius: var(--radius-md);
+        overflow-wrap: anywhere;
+      }
+      .variable-choice .select-control {
+        width: 100%;
+        max-width: none;
+      }
+      .decision-actions {
+        display: flex;
+        gap: 8px;
+        margin-top: 12px;
+      }
+      .decision-actions button {
+        flex: 1;
+      }
+      .report-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        margin-bottom: 8px;
+      }
+      #metrics {
+        color: var(--color-text-secondary);
+        font-variant-numeric: tabular-nums;
+        margin-bottom: 12px;
+      }
+      .report-block {
+        padding: 12px;
+        margin-bottom: 8px;
+        border: 0;
+        border-radius: var(--radius-md);
+        background: var(--color-bg-secondary);
+      }
+      #retry-new p {
+        margin: 0 0 8px;
+        color: var(--color-text-secondary);
+      }
+      #retry-new-btn {
+        width: 100%;
+      }
+      .report-block h2 {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        margin-bottom: 4px;
+      }
+      .report-block h2::before {
+        content: "";
+        display: block;
+        width: 4px;
+        height: 4px;
+        flex: 0 0 auto;
+        border-radius: 50%;
+        background: var(--color-success);
+      }
+      .report-block.conflicts h2 {
+        color: var(--color-danger);
+      }
+      .report-block.conflicts h2::before {
+        background: var(--color-danger);
+      }
+      .report-block.notes h2 {
+        color: var(--color-warning);
+      }
+      .report-block.notes h2::before {
+        background: var(--color-warning);
+      }
+      ul {
+        padding: 0 0 0 14px;
+        margin: 0;
+        max-height: 160px;
+        overflow-y: auto;
+        color: var(--color-text-secondary);
+      }
+      li {
+        overflow-wrap: anywhere;
+        padding: 1px 0;
+      }
+      #import-timer {
+        display: flex;
+        flex: 0 0 auto;
+        align-items: center;
+        justify-content: space-between;
+        gap: 8px;
+        padding: 8px 16px;
+        border-top: 1px solid var(--color-border);
+        color: var(--color-text-secondary);
+      }
+      #import-duration {
+        color: var(--color-text);
+        font-variant-numeric: tabular-nums;
+      }
+      .brand-footer {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 8px;
+        padding: 8px 16px;
+        flex: 0 0 auto;
+        border-top: 1px solid var(--color-border);
+        color: var(--color-text-secondary);
+      }
+      .brand-footer button {
+        padding: 4px 6px;
+        min-height: 24px;
+        color: var(--color-text-secondary);
+      }
+      .brand-footer span:last-child {
+        color: var(--color-text-tertiary);
+      }
+      ::-webkit-scrollbar {
+        width: 6px;
+        height: 6px;
+      }
+      ::-webkit-scrollbar-track {
+        background: transparent;
+      }
+      ::-webkit-scrollbar-thumb {
+        background: var(--color-border-strong);
+        border-radius: 999px;
+      }
+      ::-webkit-scrollbar-thumb:hover {
+        background: var(--color-text-secondary);
+      }
+      ::-webkit-scrollbar-corner {
+        background: transparent;
+      }
+      [hidden] {
+        display: none !important;
+      }
+      @media (prefers-reduced-motion: reduce) {
+        *,
+        *::before,
+        *::after {
+          transition: none !important;
+        }
+      }
+    </style>
+  </head>
+  <body data-connection="idle">
+    <header class="content-header">
+      <div class="header-title">
+        <svg class="header-icon" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+          <rect x="1.75" y="2.75" width="5.5" height="10.5" rx="1.25" stroke="currentColor" />
+          <path
+            d="M9.5 4.5h3.75v7H9.5M5 8h6m-2-2 2 2-2 2"
+            stroke="currentColor"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+          />
+        </svg>
+        <h1>Figma to ProtoPie</h1>
+      </div>
+      <p class="helper">Import frames into ProtoPie. Re-import to update your linked layers.</p>
+    </header>
+    <main class="panel-content">
+      <section class="section" aria-labelledby="connection-heading">
+        <h2 class="section-label" id="connection-heading">Connection</h2>
+        <div class="connection-card">
+          <div class="connection-row">
+            <span class="status-dot" aria-hidden="true"></span
+            ><span id="status-text" role="status">Loading Figma settings&hellip;</span>
+          </div>
+          <div class="connection-actions">
+            <button class="btn-secondary" id="connect-btn" type="button">Reconnect</button
+            ><button class="btn-secondary" id="disconnect-btn" type="button" disabled>
+              Disconnect
+            </button>
+          </div>
+        </div>
+        <small id="connection-name-note" hidden>ProtoPie hasn't provided this tab's name.</small>
+        <small id="disconnect-note" hidden
+          >Stops this plugin and forgets its saved approval. Import links are kept.</small
+        >
+        <p id="first-run-note" hidden>
+          Click <strong>Allow</strong> in ProtoPie Studio. Your device remembers the approval while
+          it remains valid.
+        </p>
+      </section>
+      <section class="section" aria-label="Import">
+        <div class="field-row">
+          <label for="import-scope">Import content</label>
+          <div class="select-control">
+            <select id="import-scope">
+              <option value="selection">Current selection</option>
+              <option value="page">This entire page</option>
+              <option value="file">All pages in this file</option>
+            </select>
+            <svg
+              class="select-icon"
+              viewBox="0 0 16 16"
+              fill="none"
+              aria-hidden="true"
+              focusable="false"
+            >
+              <path
+                d="m4.5 6.25 3.5 3.5 3.5-3.5"
+                stroke="currentColor"
+                stroke-width="1.25"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+              />
+            </svg>
+          </div>
+        </div>
+        <button class="btn-primary" id="run-btn" type="button" disabled>
+          Import / update in ProtoPie
+        </button>
+        <button class="btn-secondary" id="stop-btn" type="button" hidden>
+          Stop after current batch
+        </button>
+        <p id="progress" role="status" aria-live="polite"></p>
+      </section>
+      <section
+        class="section"
+        id="variable-decisions"
+        aria-labelledby="variable-decision-title"
+        hidden
+      >
+        <h2 class="section-label" id="variable-decision-title">Variable names already exist</h2>
+        <p class="helper">
+          Choose an action for each variable before importing. Use existing keeps its current value,
+          including on later imports. Skip leaves its variable actions out of this import.
+        </p>
+        <div id="variable-choice-list"></div>
+        <div class="decision-actions">
+          <button class="btn-secondary" id="variable-cancel" type="button">Cancel import</button>
+          <button class="btn-primary" id="variable-continue" type="button" disabled>
+            Continue import
+          </button>
+        </div>
+      </section>
+      <details class="settings">
+        <summary>Import settings</summary>
+        <div class="settings-content">
+          <label class="property-row"
+            ><span class="property-copy"
+              ><span class="property-title">Live auto layout</span
+              ><small
+                >Off keeps Figma's resolved positions and sizes. On lets Studio reflow the
+                layout.</small
+              ></span
+            ><span class="switch"
+              ><input id="live-auto-layout" type="checkbox" checked /><span class="switch-track"
+                ><span class="switch-thumb"></span></span></span
+          ></label>
+          <label class="property-row"
+            ><span class="property-copy"
+              ><span class="property-title">Match canvas size</span
+              ><small>Resizes every scene. Mixed-size frames use the largest bounds.</small></span
+            ><span class="switch"
+              ><input id="fit-canvas" type="checkbox" checked /><span class="switch-track"
+                ><span class="switch-thumb"></span></span></span
+          ></label>
+          <label class="property-row"
+            ><span class="property-copy"
+              ><span class="property-title">Clip truncated text</span
+              ><small
+                >Keeps single-line truncated text on one line inside a clipping container. No
+                ellipsis.</small
+              ></span
+            ><span class="switch"
+              ><input id="clip-truncated-text" type="checkbox" checked /><span class="switch-track"
+                ><span class="switch-thumb"></span></span></span
+          ></label>
+          <label class="property-row"
+            ><span class="property-copy"
+              ><span class="property-title">Create components</span
+              ><small
+                >On creates shared component masters. Off imports instances as editable
+                layers.</small
+              ></span
+            ><span class="switch"
+              ><input id="create-components" type="checkbox" checked /><span class="switch-track"
+                ><span class="switch-thumb"></span></span></span
+          ></label>
+          <label class="property-row"
+            ><span class="property-copy"
+              ><span class="property-title">Update shared masters</span
+              ><small>Applies component changes to every instance in this Pie.</small></span
+            ><span class="switch"
+              ><input id="shared-components" type="checkbox" /><span class="switch-track"
+                ><span class="switch-thumb"></span></span></span
+          ></label>
+          <label class="property-row"
+            ><span class="property-copy"
+              ><span class="property-title">Import as new</span
+              ><small>Creates a separate import and keeps existing content. Used once.</small></span
+            ><span class="switch"
+              ><input id="force-fresh" type="checkbox" /><span class="switch-track"
+                ><span class="switch-thumb"></span></span></span
+          ></label>
+          <div class="connection-settings">
+            <label for="endpoint"
+              >Studio MCP address<input
+                id="endpoint"
+                type="text"
+                value="http://127.0.0.1:9982/mcp"
+                spellcheck="false" /></label
+            ><button class="btn-secondary" id="switch-target-btn" type="button">
+              Connect to current ProtoPie tab</button
+            ><small>Requests a new approval for the focused Studio tab.</small>
+          </div>
+        </div>
+      </details>
+      <section class="section" id="report" aria-label="Last import" hidden>
+        <div class="report-header"><h2>Last import</h2></div>
+        <p id="metrics"></p>
+        <section class="report-block" id="group-created" hidden>
+          <h2>Created</h2>
+          <ul></ul>
+        </section>
+        <section class="report-block" id="group-updated" hidden>
+          <h2>Updated</h2>
+          <ul></ul>
+        </section>
+        <section class="report-block" id="group-skipped" hidden>
+          <h2>Unchanged</h2>
+          <ul></ul>
+        </section>
+        <section class="report-block conflicts" id="group-conflicts" hidden>
+          <h2>Preserved &mdash; needs your decision</h2>
+          <ul></ul>
+        </section>
+        <div class="report-block" id="retry-new" hidden>
+          <p>
+            These saved links couldn't be safely reused. Import as new creates a separate copy and
+            keeps existing content.
+          </p>
+          <button class="btn-secondary" id="retry-new-btn" type="button">Import as new</button>
+        </div>
+        <section class="report-block notes" id="group-verification" hidden>
+          <h2>Imported content needs verification</h2>
+          <ul></ul>
+          <button class="btn-secondary" id="verify-btn" type="button">
+            Retry verification only
+          </button>
+          <small>Reads the existing import without rebuilding it or changing Studio content.</small>
+        </section>
+        <section class="report-block conflicts" id="group-errors" hidden>
+          <h2>Could not complete</h2>
+          <ul></ul>
+        </section>
+        <section class="report-block notes" id="group-unsupported" hidden>
+          <h2>Import notes</h2>
+          <ul></ul>
+        </section>
+        <small
+          >Diagnostics include the selected design content and are saved only to your
+          computer.</small
+        >
+      </section>
+    </main>
+    <div id="import-timer" role="timer" aria-label="Import duration" aria-live="off" hidden>
+      <span id="import-timer-status">Elapsed</span><span id="import-duration">00:00</span>
+    </div>
+    <footer class="brand-footer">
+      <span>Figma to ProtoPie</span
+      ><button
+        id="download-report"
+        type="button"
+        title="Download the report and selected design content, including an import still in progress."
+      >
+        Save diagnostics</button
+      ><span>v0.3.4</span>
+    </footer>
+    <script src="ui.js"></script>
+  </body>
+</html>

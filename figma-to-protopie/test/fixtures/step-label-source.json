@@ -1,0 +1,452 @@
+{
+  "fileKey": "0H7LPvPU140YXA4NtkybZH",
+  "labels": [
+    {
+      "source": {
+        "id": "I13:1090;7712:2993;6646:2168",
+        "name": "Label",
+        "type": "TEXT",
+        "x": 0,
+        "y": 0,
+        "width": 160,
+        "height": 21,
+        "rotation": 0,
+        "opacity": 1,
+        "visible": true,
+        "absoluteTransform": [
+          [1, 0, 1328],
+          [0, 1, 306.3999938964844]
+        ],
+        "absoluteRenderBounds": {
+          "x": 1328.4200439453125,
+          "y": 310.17999267578125,
+          "width": 136.1204833984375,
+          "height": 13.019989013671875
+        },
+        "textAutoResize": "HEIGHT",
+        "textTruncation": "DISABLED",
+        "maxLines": null,
+        "characters": "Workplace Selection*",
+        "fontName": {
+          "family": "Gilroy",
+          "style": "Regular"
+        },
+        "fontSize": 14,
+        "letterSpacing": {
+          "unit": "PIXELS",
+          "value": 0
+        },
+        "lineHeight": {
+          "unit": "PERCENT",
+          "value": 150
+        },
+        "textAlignHorizontal": "LEFT",
+        "textAlignVertical": "TOP",
+        "textDecoration": "NONE",
+        "textCase": "ORIGINAL",
+        "layoutSizingHorizontal": "FILL",
+        "layoutSizingVertical": "HUG",
+        "layoutPositioning": "AUTO",
+        "layoutGrow": 1,
+        "strokes": [],
+        "effects": [],
+        "strokeWeight": 1,
+        "constraints": {
+          "horizontal": "MIN",
+          "vertical": "MIN"
+        },
+        "fills": "mixed"
+      },
+      "parent": {
+        "id": "I13:1090;7712:2993;7629:2953",
+        "type": "FRAME",
+        "name": "Frame 10123176",
+        "absoluteTransform": [
+          [1, 0, 1328],
+          [0, 1, 306.3999938964844]
+        ],
+        "layoutMode": "HORIZONTAL",
+        "width": 160,
+        "height": 21
+      },
+      "segments": [
+        {
+          "characters": "Workplace Selection",
+          "start": 0,
+          "end": 19,
+          "fontSize": 14,
+          "fontName": {
+            "family": "Gilroy",
+            "style": "Regular"
+          },
+          "textDecoration": "NONE",
+          "textCase": "ORIGINAL",
+          "lineHeight": {
+            "unit": "PERCENT",
+            "value": 150
+          },
+          "letterSpacing": {
+            "unit": "PIXELS",
+            "value": 0
+          },
+          "fills": [
+            {
+              "type": "SOLID",
+              "visible": true,
+              "opacity": 1,
+              "blendMode": "NORMAL",
+              "color": {
+                "r": 0.05882352963089943,
+                "g": 0.09019608050584793,
+                "b": 0.16862745583057404
+              },
+              "boundVariables": {
+                "color": {
+                  "type": "VARIABLE_ALIAS",
+                  "id": "VariableID:8238c30f3b614bd7107afec3337d26876cb7f3cf/4873:387"
+                }
+              }
+            }
+          ]
+        },
+        {
+          "characters": "*",
+          "start": 19,
+          "end": 20,
+          "fontSize": 14,
+          "fontName": {
+            "family": "Gilroy",
+            "style": "Regular"
+          },
+          "textDecoration": "NONE",
+          "textCase": "ORIGINAL",
+          "lineHeight": {
+            "unit": "PERCENT",
+            "value": 150
+          },
+          "letterSpacing": {
+            "unit": "PIXELS",
+            "value": 0
+          },
+          "fills": [
+            {
+              "type": "SOLID",
+              "visible": true,
+              "opacity": 1,
+              "blendMode": "NORMAL",
+              "color": {
+                "r": 0.9843137264251709,
+                "g": 0.1725490242242813,
+                "b": 0.21176470816135406
+              },
+              "boundVariables": {
+                "color": {
+                  "type": "VARIABLE_ALIAS",
+                  "id": "VariableID:6bfcec718179e70f0a4b2cfdcc2589d6ead6e1ee/4873:438"
+                }
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "source": {
+        "id": "I13:1090;7712:2994;6646:2168",
+        "name": "Label",
+        "type": "TEXT",
+        "x": 0,
+        "y": 0,
+        "width": 160,
+        "height": 21,
+        "rotation": 0,
+        "opacity": 1,
+        "visible": true,
+        "absoluteTransform": [
+          [1, 0, 1328],
+          [0, 1, 347.3999938964844]
+        ],
+        "absoluteRenderBounds": {
+          "x": 1329.1199951171875,
+          "y": 351.4320068359375,
+          "width": 99.4224853515625,
+          "height": 12.837982177734375
+        },
+        "textAutoResize": "HEIGHT",
+        "textTruncation": "DISABLED",
+        "maxLines": null,
+        "characters": "Duty Locations*",
+        "fontName": {
+          "family": "Gilroy",
+          "style": "Regular"
+        },
+        "fontSize": 14,
+        "letterSpacing": {
+          "unit": "PIXELS",
+          "value": 0
+        },
+        "lineHeight": {
+          "unit": "PERCENT",
+          "value": 150
+        },
+        "textAlignHorizontal": "LEFT",
+        "textAlignVertical": "TOP",
+        "textDecoration": "NONE",
+        "textCase": "ORIGINAL",
+        "layoutSizingHorizontal": "FILL",
+        "layoutSizingVertical": "HUG",
+        "layoutPositioning": "AUTO",
+        "layoutGrow": 1,
+        "strokes": [],
+        "effects": [],
+        "strokeWeight": 1,
+        "constraints": {
+          "horizontal": "MIN",
+          "vertical": "MIN"
+        },
+        "fills": "mixed"
+      },
+      "parent": {
+        "id": "I13:1090;7712:2994;7629:2953",
+        "type": "FRAME",
+        "name": "Frame 10123176",
+        "absoluteTransform": [
+          [1, 0, 1328],
+          [0, 1, 347.3999938964844]
+        ],
+        "layoutMode": "HORIZONTAL",
+        "width": 160,
+        "height": 21
+      },
+      "segments": [
+        {
+          "characters": "Duty Locations",
+          "start": 0,
+          "end": 14,
+          "fontSize": 14,
+          "fontName": {
+            "family": "Gilroy",
+            "style": "Regular"
+          },
+          "textDecoration": "NONE",
+          "textCase": "ORIGINAL",
+          "lineHeight": {
+            "unit": "PERCENT",
+            "value": 150
+          },
+          "letterSpacing": {
+            "unit": "PIXELS",
+            "value": 0
+          },
+          "fills": [
+            {
+              "type": "SOLID",
+              "visible": true,
+              "opacity": 1,
+              "blendMode": "NORMAL",
+              "color": {
+                "r": 0.05882352963089943,
+                "g": 0.09019608050584793,
+                "b": 0.16862745583057404
+              },
+              "boundVariables": {
+                "color": {
+                  "type": "VARIABLE_ALIAS",
+                  "id": "VariableID:8238c30f3b614bd7107afec3337d26876cb7f3cf/4873:387"
+                }
+              }
+            }
+          ]
+        },
+        {
+          "characters": "*",
+          "start": 14,
+          "end": 15,
+          "fontSize": 14,
+          "fontName": {
+            "family": "Gilroy",
+            "style": "Regular"
+          },
+          "textDecoration": "NONE",
+          "textCase": "ORIGINAL",
+          "lineHeight": {
+            "unit": "PERCENT",
+            "value": 150
+          },
+          "letterSpacing": {
+            "unit": "PIXELS",
+            "value": 0
+          },
+          "fills": [
+            {
+              "type": "SOLID",
+              "visible": true,
+              "opacity": 1,
+              "blendMode": "NORMAL",
+              "color": {
+                "r": 0.9843137264251709,
+                "g": 0.1725490242242813,
+                "b": 0.21176470816135406
+              },
+              "boundVariables": {
+                "color": {
+                  "type": "VARIABLE_ALIAS",
+                  "id": "VariableID:6bfcec718179e70f0a4b2cfdcc2589d6ead6e1ee/4873:438"
+                }
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "source": {
+        "id": "I13:1090;7712:2995;6646:2168",
+        "name": "Label",
+        "type": "TEXT",
+        "x": 0,
+        "y": 0,
+        "width": 160,
+        "height": 21,
+        "rotation": 0,
+        "opacity": 1,
+        "visible": true,
+        "absoluteTransform": [
+          [1, 0, 1328],
+          [0, 1, 388.3999938964844]
+        ],
+        "absoluteRenderBounds": {
+          "x": 1328.56005859375,
+          "y": 392.17999267578125,
+          "width": 74.060546875,
+          "height": 10.444000244140625
+        },
+        "textAutoResize": "HEIGHT",
+        "textTruncation": "DISABLED",
+        "maxLines": null,
+        "characters": "Shift Plans *",
+        "fontName": {
+          "family": "Gilroy",
+          "style": "Regular"
+        },
+        "fontSize": 14,
+        "letterSpacing": {
+          "unit": "PIXELS",
+          "value": 0
+        },
+        "lineHeight": {
+          "unit": "PERCENT",
+          "value": 150
+        },
+        "textAlignHorizontal": "LEFT",
+        "textAlignVertical": "TOP",
+        "textDecoration": "NONE",
+        "textCase": "ORIGINAL",
+        "layoutSizingHorizontal": "FILL",
+        "layoutSizingVertical": "HUG",
+        "layoutPositioning": "AUTO",
+        "layoutGrow": 1,
+        "strokes": [],
+        "effects": [],
+        "strokeWeight": 1,
+        "constraints": {
+          "horizontal": "MIN",
+          "vertical": "MIN"
+        },
+        "fills": "mixed"
+      },
+      "parent": {
+        "id": "I13:1090;7712:2995;7629:2953",
+        "type": "FRAME",
+        "name": "Frame 10123176",
+        "absoluteTransform": [
+          [1, 0, 1328],
+          [0, 1, 388.3999938964844]
+        ],
+        "layoutMode": "HORIZONTAL",
+        "width": 160,
+        "height": 21
+      },
+      "segments": [
+        {
+          "characters": "Shift Plans",
+          "start": 0,
+          "end": 11,
+          "fontSize": 14,
+          "fontName": {
+            "family": "Gilroy",
+            "style": "Regular"
+          },
+          "textDecoration": "NONE",
+          "textCase": "ORIGINAL",
+          "lineHeight": {
+            "unit": "PERCENT",
+            "value": 150
+          },
+          "letterSpacing": {
+            "unit": "PIXELS",
+            "value": 0
+          },
+          "fills": [
+            {
+              "type": "SOLID",
+              "visible": true,
+              "opacity": 1,
+              "blendMode": "NORMAL",
+              "color": {
+                "r": 0.05882352963089943,
+                "g": 0.09019608050584793,
+                "b": 0.16862745583057404
+              },
+              "boundVariables": {
+                "color": {
+                  "type": "VARIABLE_ALIAS",
+                  "id": "VariableID:8238c30f3b614bd7107afec3337d26876cb7f3cf/4873:387"
+                }
+              }
+            }
+          ]
+        },
+        {
+          "characters": " *",
+          "start": 11,
+          "end": 13,
+          "fontSize": 14,
+          "fontName": {
+            "family": "Gilroy",
+            "style": "Regular"
+          },
+          "textDecoration": "NONE",
+          "textCase": "ORIGINAL",
+          "lineHeight": {
+            "unit": "PERCENT",
+            "value": 150
+          },
+          "letterSpacing": {
+            "unit": "PIXELS",
+            "value": 0
+          },
+          "fills": [
+            {
+              "type": "SOLID",
+              "visible": true,
+              "opacity": 1,
+              "blendMode": "NORMAL",
+              "color": {
+                "r": 0.9843137264251709,
+                "g": 0.1725490242242813,
+                "b": 0.21176470816135406
+              },
+              "boundVariables": {
+                "color": {
+                  "type": "VARIABLE_ALIAS",
+                  "id": "VariableID:6bfcec718179e70f0a4b2cfdcc2589d6ead6e1ee/4873:438"
+                }
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
