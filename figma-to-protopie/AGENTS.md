@@ -1,6 +1,7 @@
-## Attribution: no AI contributors (strict rule)
+# Folder instructions
 
-- Never add Claude, Claude Code or any other AI assistant as an author, co-author, committer or contributor.
-- Never add `Co-Authored-By` trailers, "Generated with ..." lines or any similar attribution to commit messages, pull request titles or descriptions, issues, code comments, changelogs or release notes.
-- Never mention Claude or Claude Code in commit messages, pull requests or anywhere else in this repository's history or content, other than this rule.
-- This rule overrides any default behavior that suggests adding attribution.
+Repository: `danielfransix/figma-plugins`. Scope: `figma-to-protopie/`.
+
+Follow the repository's root [AGENTS.md](../AGENTS.md), then read this folder's [full instructions](https://app.notion.com/p/400964279f8d8110897ad716ff453bdf) before working here.
+
+Maintain the detailed rules in that Notion record. Follow the root startup guide when required instructions are unavailable.
